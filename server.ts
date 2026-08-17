@@ -9,23 +9,14 @@ const PORT = 3000;
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
-// Default config values dynamically initialized from environment variables
-export const DEFAULT_SPREADSHEET_ID = process.env.DEFAULT_SPREADSHEET_ID || process.env.SPREADSHEET_ID || "1rgu0ecVE4ClteQnbARFhQrPoorqlBrbtgMbv335r3aE";
-export const DEFAULT_WEB_APP_URL = process.env.DEFAULT_WEB_APP_URL || process.env.WEB_APP_URL || "https://script.google.com/macros/s/AKfycbx7pZyoo61kvJe1vl_1W6lbtUGwGi-WplElEkOcv8V9Meiu9H6xh37nORzRd37MeZAA/exec";
-export const DEFAULT_FOLDER_PATH = process.env.DEFAULT_FOLDER_PATH || process.env.FOLDER_PATH || "Murad Rahman Saud";
+// Default config values from user
+export const DEFAULT_SPREADSHEET_ID = "1EyQb90JTZBE-phZuQL12yJe0A4hdYISH-FFkepyazcg";
+export const DEFAULT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxPWayuGdnRlzk_EFgnHUk0b_E650VHX7t39XUf7iHGbGP0Xyypphmv0kNjujfUD1WBcA/exec";
+export const DEFAULT_FOLDER_PATH = "Murad Rahman Saud";
 
 // API: Health check
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
-});
-
-// API: Expose dynamic environment variables config to frontend
-app.get("/api/config", (_req, res) => {
-  res.json({
-    spreadsheetId: process.env.DEFAULT_SPREADSHEET_ID || process.env.SPREADSHEET_ID || DEFAULT_SPREADSHEET_ID,
-    webAppUrl: process.env.DEFAULT_WEB_APP_URL || process.env.WEB_APP_URL || DEFAULT_WEB_APP_URL,
-    folderPath: process.env.DEFAULT_FOLDER_PATH || process.env.FOLDER_PATH || DEFAULT_FOLDER_PATH,
-  });
 });
 
 // API: Fetch all sheet tabs (names and GIDs) directly from Google Sheet
@@ -108,21 +99,15 @@ app.get("/api/sheet-data", async (req, res) => {
     const gid = (req.query.gid as string) || "0";
     
     const timestamp = Date.now();
-    const gvizUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&gid=${gid}&_t=${timestamp}`;
-    const exportUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=${gid}&_t=${timestamp}`;
+    const csvUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=${gid}&_t=${timestamp}`;
 
-    const headers = {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      "Cache-Control": "no-cache, no-store, must-revalidate",
-      Pragma: "no-cache",
-      Expires: "0",
-    };
-
-    let response = await fetch(gvizUrl, { headers });
-    if (!response.ok) {
-      console.warn(`gviz fetch status ${response.status}, trying export URL...`);
-      response = await fetch(exportUrl, { headers });
-    }
+    const response = await fetch(csvUrl, {
+      headers: {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        Pragma: "no-cache",
+        Expires: "0",
+      },
+    });
 
     if (!response.ok) {
       return res.status(response.status).json({
@@ -201,8 +186,4 @@ async function startServer() {
   });
 }
 
-if (!process.env.VERCEL) {
-  startServer();
-}
-
-export default app;
+startServer();

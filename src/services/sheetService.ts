@@ -1,33 +1,9 @@
 import Papa from 'papaparse';
 import { SheetOperationResponse, SheetTab, UploadResponse, ColumnTypeMap, ColumnConfig, DATA_TYPE_GID } from '../types';
 
-export const DEFAULT_SPREADSHEET_ID =
-  (import.meta.env.VITE_DEFAULT_SPREADSHEET_ID as string) ||
-  (import.meta.env.VITE_SPREADSHEET_ID as string) ||
-  "1rgu0ecVE4ClteQnbARFhQrPoorqlBrbtgMbv335r3aE";
-
-export const DEFAULT_WEB_APP_URL =
-  (import.meta.env.VITE_DEFAULT_WEB_APP_URL as string) ||
-  (import.meta.env.VITE_WEB_APP_URL as string) ||
-  "https://script.google.com/macros/s/AKfycbx7pZyoo61kvJe1vl_1W6lbtUGwGi-WplElEkOcv8V9Meiu9H6xh37nORzRd37MeZAA/exec";
-
-export const DEFAULT_FOLDER_PATH =
-  (import.meta.env.VITE_DEFAULT_FOLDER_PATH as string) ||
-  (import.meta.env.VITE_FOLDER_PATH as string) ||
-  "Murad Rahman Saud";
-
-export async function fetchServerDefaultConfig(): Promise<{ spreadsheetId: string; webAppUrl: string; folderPath: string } | null> {
-  try {
-    const res = await fetch('/api/config');
-    if (res.ok) {
-      const data = await res.json();
-      return data;
-    }
-  } catch (err) {
-    console.warn("Could not fetch server default config:", err);
-  }
-  return null;
-}
+export const DEFAULT_SPREADSHEET_ID = "1rgu0ecVE4ClteQnbARFhQrPoorqlBrbtgMbv335r3aE";
+export const DEFAULT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbx7pZyoo61kvJe1vl_1W6lbtUGwGi-WplElEkOcv8V9Meiu9H6xh37nORzRd37MeZAA/exec";
+export const DEFAULT_FOLDER_PATH = "Murad Rahman Saud";
 
 export const INITIAL_TABS: SheetTab[] = [
   {
@@ -122,41 +98,21 @@ export async function addSheetColumn(
 }
 
 /**
- * Fetches Google Sheet CSV data via the server proxy, with client-side fallback and parses headers and rows.
+ * Fetches Google Sheet CSV data via the server proxy and parses headers and rows.
  */
 export async function fetchSheetData(
   spreadsheetId: string = DEFAULT_SPREADSHEET_ID,
   gid: string = '0'
 ): Promise<{ headers: string[]; rows: Record<string, any>[] }> {
-  let csvText = '';
   const url = `/api/sheet-data?spreadsheetId=${encodeURIComponent(spreadsheetId)}&gid=${encodeURIComponent(gid)}&_t=${Date.now()}`;
   
-  try {
-    const response = await fetch(url);
-    if (response.ok) {
-      csvText = await response.text();
-    } else {
-      const errJson = await response.json().catch(() => null);
-      throw new Error(errJson?.error || `Server proxy returned status ${response.status}`);
-    }
-  } catch (serverError) {
-    console.warn("Server sheet proxy failed, attempting direct browser fetch from Google Sheets...", serverError);
-    // Direct client-side fetch fallbacks
-    const gvizUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&gid=${gid}&_t=${Date.now()}`;
-    const directRes = await fetch(gvizUrl);
-    
-    if (directRes.ok) {
-      csvText = await directRes.text();
-    } else {
-      const exportUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=${gid}&_t=${Date.now()}`;
-      const exportRes = await fetch(exportUrl);
-      if (exportRes.ok) {
-        csvText = await exportRes.text();
-      } else {
-        throw new Error(`Failed to fetch sheet data (Status: ${exportRes.status}). Please verify that Google Sheet sharing is set to "Anyone with the link can view".`);
-      }
-    }
+  const response = await fetch(url);
+  if (!response.ok) {
+    const errJson = await response.json().catch(() => null);
+    throw new Error(errJson?.error || `Failed to fetch sheet data (Status: ${response.status})`);
   }
+
+  const csvText = await response.text();
   
   return new Promise((resolve, reject) => {
     Papa.parse(csvText, {

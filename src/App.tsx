@@ -8,7 +8,6 @@ import {
   fetchAppConfigFromSheet,
   saveSheetTabsConfigToSheet,
   fetchSheetTabsConfigFromSheet,
-  fetchServerDefaultConfig,
   addRowToSheet, 
   updateRowInSheet, 
   deleteRowFromSheet,
@@ -339,21 +338,21 @@ export default function App() {
     }
   }, [config.spreadsheetId]);
 
-  // Fetch and sync configuration from GID 0 if present in Google Sheet or from server environment variables
+  // Fetch and sync configuration from GID 0 if present in Google Sheet
   const syncAppConfig = useCallback(async (currentSpreadsheetId = config.spreadsheetId) => {
     try {
-      const serverDefaults = await fetchServerDefaultConfig();
       const remoteConfig = await fetchAppConfigFromSheet(currentSpreadsheetId);
-
-      setConfig((prev) => {
-        const updated = {
-          spreadsheetId: remoteConfig?.spreadsheetId || prev.spreadsheetId || serverDefaults?.spreadsheetId || DEFAULT_SPREADSHEET_ID,
-          webAppUrl: remoteConfig?.webAppUrl || prev.webAppUrl || serverDefaults?.webAppUrl || DEFAULT_WEB_APP_URL,
-          folderPath: remoteConfig?.folderPath || prev.folderPath || serverDefaults?.folderPath || DEFAULT_FOLDER_PATH,
-        };
-        localStorage.setItem('sheetsync_config', JSON.stringify(updated));
-        return updated;
-      });
+      if (remoteConfig) {
+        setConfig((prev) => {
+          const updated = {
+            spreadsheetId: remoteConfig.spreadsheetId || prev.spreadsheetId,
+            webAppUrl: remoteConfig.webAppUrl || prev.webAppUrl,
+            folderPath: remoteConfig.folderPath || prev.folderPath,
+          };
+          localStorage.setItem('sheetsync_config', JSON.stringify(updated));
+          return updated;
+        });
+      }
 
       // Sync tab configurations (hidden status) saved in GID 0
       const remoteTabsConfig = await fetchSheetTabsConfigFromSheet(currentSpreadsheetId);

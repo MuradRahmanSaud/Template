@@ -26,8 +26,7 @@ import {
   DEFAULT_FOLDER_PATH, 
   fetchSheetData,
   fetchSheetTabs,
-  createSheetTab,
-  fetchServerDefaultConfig
+  createSheetTab
 } from '../services/sheetService';
 import { AppsScriptGuideModal } from './AppsScriptGuideModal';
 
@@ -81,11 +80,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleResetDefaults = async () => {
-    const serverDefaults = await fetchServerDefaultConfig();
-    setSpreadsheetId(serverDefaults?.spreadsheetId || DEFAULT_SPREADSHEET_ID);
-    setWebAppUrl(serverDefaults?.webAppUrl || DEFAULT_WEB_APP_URL);
-    setFolderPath(serverDefaults?.folderPath || DEFAULT_FOLDER_PATH);
+  const handleResetDefaults = () => {
+    setSpreadsheetId(DEFAULT_SPREADSHEET_ID);
+    setWebAppUrl(DEFAULT_WEB_APP_URL);
+    setFolderPath(DEFAULT_FOLDER_PATH);
   };
 
   const handleTestConnection = async () => {
