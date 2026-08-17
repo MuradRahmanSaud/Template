@@ -128,6 +128,20 @@ export async function addSheetColumn(
 }
 
 /**
+ * Checks whether a column header has an actual user-defined name.
+ * Excludes empty string headers, whitespace-only headers, and auto-generated headers like _1, _2, _3, etc.
+ */
+export function isNamedColumn(headerName: string | undefined | null): boolean {
+  if (!headerName) return false;
+  const trimmed = String(headerName).trim();
+  if (!trimmed) return false;
+  if (/^_\d+$/.test(trimmed)) return false;
+  if (/^field_\d+$/i.test(trimmed)) return false;
+  if (trimmed === '__parsed_extra') return false;
+  return true;
+}
+
+/**
  * Fetches Google Sheet CSV data with multi-level fallbacks (Server API -> GViz CSV -> Export CSV).
  * Ensures smooth operation on Vercel static hosting and local development environments.
  */
@@ -198,16 +212,54 @@ export async function fetchSheetData(
 
   return new Promise((resolve, reject) => {
     Papa.parse(csvText!, {
-      header: true,
+      header: false,
       skipEmptyLines: 'greedy',
-      transformHeader: (header) => header.trim(),
       complete: (results) => {
-        const headers = (results.meta.fields || []).filter(h => h && h.length > 0);
-        // Clean rows
-        const rows = (results.data as Record<string, any>[]).filter((row) => {
-          // Filter out rows that are completely empty
-          return Object.values(row).some(val => val !== null && val !== undefined && String(val).trim() !== '');
+        const rawRows = (results.data as string[][]) || [];
+        if (!rawRows || rawRows.length === 0) {
+          return resolve({ headers: [], rows: [] });
+        }
+
+        // Row 0 contains the raw header names
+        const rawHeaders = rawRows[0] || [];
+        const validHeaderIndices: number[] = [];
+        const headers: string[] = [];
+        const seenHeaderCounts: Record<string, number> = {};
+
+        rawHeaders.forEach((rawH, index) => {
+          const trimmed = String(rawH || '').trim();
+          if (isNamedColumn(trimmed)) {
+            let uniqueName = trimmed;
+            if (seenHeaderCounts[trimmed]) {
+              seenHeaderCounts[trimmed] += 1;
+              uniqueName = `${trimmed} (${seenHeaderCounts[trimmed]})`;
+            } else {
+              seenHeaderCounts[trimmed] = 1;
+            }
+            headers.push(uniqueName);
+            validHeaderIndices.push(index);
+          }
         });
+
+        // Map data rows to objects using valid header indices
+        const rows: Record<string, any>[] = [];
+        for (let i = 1; i < rawRows.length; i++) {
+          const rawRow = rawRows[i];
+          if (!rawRow || rawRow.length === 0) continue;
+
+          // Skip rows that are completely empty
+          const hasData = rawRow.some(val => val !== null && val !== undefined && String(val).trim() !== '');
+          if (!hasData) continue;
+
+          const rowObj: Record<string, any> = {};
+          validHeaderIndices.forEach((colIdx, hIdx) => {
+            const headerName = headers[hIdx];
+            const cellValue = rawRow[colIdx] !== undefined ? String(rawRow[colIdx]).trim() : '';
+            rowObj[headerName] = cellValue;
+          });
+          rows.push(rowObj);
+        }
+
         resolve({ headers, rows });
       },
       error: (error: Error) => {
@@ -671,12 +723,14 @@ export function getOrderedHeaders(
   headers: string[],
   configs?: Record<string, string | ColumnConfig>
 ): string[] {
-  if (!headers || headers.length <= 1) return [...(headers || [])];
+  if (!headers) return [];
+  const validHeaders = headers.filter(isNamedColumn);
+  if (validHeaders.length <= 1) return [...validHeaders];
   if (!configs || Object.keys(configs).length === 0) {
-    return [...headers];
+    return [...validHeaders];
   }
 
-  const headerList = [...headers];
+  const headerList = [...validHeaders];
 
   return headerList.sort((a, b) => {
     const cfgA = configs[a] ?? configs[a.trim()];
@@ -692,7 +746,7 @@ export function getOrderedHeaders(
       return orderA - orderB;
     }
 
-    return headers.indexOf(a) - headers.indexOf(b);
+    return validHeaders.indexOf(a) - validHeaders.indexOf(b);
   });
 }
 
@@ -703,6 +757,7 @@ export function isColumnVisibleInTable(
   colName: string,
   configs?: Record<string, string | ColumnConfig>
 ): boolean {
+  if (!isNamedColumn(colName)) return false;
   if (!configs) return true;
   const cfg = configs[colName] ?? configs[colName.trim()];
   if (!cfg) return true;
@@ -717,6 +772,7 @@ export function isColumnVisibleInForm(
   colName: string,
   configs?: Record<string, string | ColumnConfig>
 ): boolean {
+  if (!isNamedColumn(colName)) return false;
   if (!configs) return true;
   const cfg = configs[colName] ?? configs[colName.trim()];
   if (!cfg) return true;

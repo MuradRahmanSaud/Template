@@ -28,7 +28,7 @@ import {
   Key
 } from 'lucide-react';
 import { SheetTab, INPUT_TYPE_OPTIONS, DATA_TYPE_GID, ColumnConfig } from '../types';
-import { normalizeColumnConfig, getOrderedHeaders } from '../services/sheetService';
+import { normalizeColumnConfig, getOrderedHeaders, isNamedColumn } from '../services/sheetService';
 
 interface DataTypeModalProps {
   isOpen: boolean;
@@ -131,11 +131,13 @@ export const DataTypeModal: React.FC<DataTypeModalProps> = ({
       setDraggedIndex(null);
       setDragOverIndex(null);
 
+      const validHeaders = headers.filter(isNamedColumn);
+
       // Sort initial headers based on saved order
-      const sorted = getOrderedHeaders(headers, currentColumnTypes);
-      // Ensure all headers from current sheet are included
+      const sorted = getOrderedHeaders(validHeaders, currentColumnTypes);
+      // Ensure all valid headers from current sheet are included
       const allSorted = [...sorted];
-      headers.forEach((h) => {
+      validHeaders.forEach((h) => {
         if (!allSorted.includes(h)) {
           allSorted.push(h);
         }
@@ -149,7 +151,7 @@ export const DataTypeModal: React.FC<DataTypeModalProps> = ({
       const initialShowInTable: Record<string, boolean> = {};
       const initialShowInForm: Record<string, boolean> = {};
 
-      headers.forEach((h) => {
+      validHeaders.forEach((h) => {
         const rawConfig = currentColumnTypes[h] || currentColumnTypes[h.trim()];
         const norm = normalizeColumnConfig(rawConfig);
         const lower = h.toLowerCase().trim();
@@ -175,7 +177,7 @@ export const DataTypeModal: React.FC<DataTypeModalProps> = ({
         initialShowInForm[h] = norm.showInForm !== false;
       });
 
-      let pCol = headers.find((h) => {
+      let pCol = validHeaders.find((h) => {
         const rawConfig = currentColumnTypes[h] || currentColumnTypes[h.trim()];
         if (typeof rawConfig === 'object' && rawConfig.isPrimary) return true;
         return false;
@@ -214,7 +216,7 @@ export const DataTypeModal: React.FC<DataTypeModalProps> = ({
       setInitialSnapshot('');
     } else if (isOpen && hasInitialized) {
       // Append any newly added headers without resetting existing state
-      const addedHeaders = headers.filter(h => !orderedHeaders.includes(h));
+      const addedHeaders = headers.filter(h => isNamedColumn(h) && !orderedHeaders.includes(h));
       if (addedHeaders.length > 0) {
         setOrderedHeaders(prev => [...prev, ...addedHeaders]);
         setTypesMap(prev => {
