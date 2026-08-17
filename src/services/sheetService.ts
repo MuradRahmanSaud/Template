@@ -122,21 +122,41 @@ export async function addSheetColumn(
 }
 
 /**
- * Fetches Google Sheet CSV data via the server proxy and parses headers and rows.
+ * Fetches Google Sheet CSV data via the server proxy, with client-side fallback and parses headers and rows.
  */
 export async function fetchSheetData(
   spreadsheetId: string = DEFAULT_SPREADSHEET_ID,
   gid: string = '0'
 ): Promise<{ headers: string[]; rows: Record<string, any>[] }> {
+  let csvText = '';
   const url = `/api/sheet-data?spreadsheetId=${encodeURIComponent(spreadsheetId)}&gid=${encodeURIComponent(gid)}&_t=${Date.now()}`;
   
-  const response = await fetch(url);
-  if (!response.ok) {
-    const errJson = await response.json().catch(() => null);
-    throw new Error(errJson?.error || `Failed to fetch sheet data (Status: ${response.status})`);
+  try {
+    const response = await fetch(url);
+    if (response.ok) {
+      csvText = await response.text();
+    } else {
+      const errJson = await response.json().catch(() => null);
+      throw new Error(errJson?.error || `Server proxy returned status ${response.status}`);
+    }
+  } catch (serverError) {
+    console.warn("Server sheet proxy failed, attempting direct browser fetch from Google Sheets...", serverError);
+    // Direct client-side fetch fallbacks
+    const gvizUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&gid=${gid}&_t=${Date.now()}`;
+    const directRes = await fetch(gvizUrl);
+    
+    if (directRes.ok) {
+      csvText = await directRes.text();
+    } else {
+      const exportUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=${gid}&_t=${Date.now()}`;
+      const exportRes = await fetch(exportUrl);
+      if (exportRes.ok) {
+        csvText = await exportRes.text();
+      } else {
+        throw new Error(`Failed to fetch sheet data (Status: ${exportRes.status}). Please verify that Google Sheet sharing is set to "Anyone with the link can view".`);
+      }
+    }
   }
-
-  const csvText = await response.text();
   
   return new Promise((resolve, reject) => {
     Papa.parse(csvText, {

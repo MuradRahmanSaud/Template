@@ -108,15 +108,21 @@ app.get("/api/sheet-data", async (req, res) => {
     const gid = (req.query.gid as string) || "0";
     
     const timestamp = Date.now();
-    const csvUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=${gid}&_t=${timestamp}`;
+    const gvizUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&gid=${gid}&_t=${timestamp}`;
+    const exportUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=${gid}&_t=${timestamp}`;
 
-    const response = await fetch(csvUrl, {
-      headers: {
-        "Cache-Control": "no-cache, no-store, must-revalidate",
-        Pragma: "no-cache",
-        Expires: "0",
-      },
-    });
+    const headers = {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Cache-Control": "no-cache, no-store, must-revalidate",
+      Pragma: "no-cache",
+      Expires: "0",
+    };
+
+    let response = await fetch(gvizUrl, { headers });
+    if (!response.ok) {
+      console.warn(`gviz fetch status ${response.status}, trying export URL...`);
+      response = await fetch(exportUrl, { headers });
+    }
 
     if (!response.ok) {
       return res.status(response.status).json({
