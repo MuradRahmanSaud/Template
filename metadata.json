@@ -1,0 +1,8 @@
+{
+  "name": "Google Sheet Data Manager Template V2",
+  "description": "Compact teal-themed manager to view, add, edit, delete Google Sheet table records, sync data, and upload files to Google Drive.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
