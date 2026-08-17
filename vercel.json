@@ -1,0 +1,26 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "rewrites": [
+    {
+      "source": "/api/sheet-data",
+      "destination": "/api/sheet-data"
+    },
+    {
+      "source": "/api/sheet-tabs",
+      "destination": "/api/sheet-tabs"
+    },
+    {
+      "source": "/api/appscript",
+      "destination": "/api/appscript"
+    },
+    {
+      "source": "/api/health",
+      "destination": "/api/health"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

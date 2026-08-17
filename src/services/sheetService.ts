@@ -16,31 +16,61 @@ export const INITIAL_TABS: SheetTab[] = [
 
 /**
  * Dynamically fetches all sheet tabs with their real names and GIDs from Google Sheets.
+ * Tries server API proxy first, and falls back to direct client-side Google Sheet htmlview fetch.
  */
 export async function fetchSheetTabs(spreadsheetId: string = DEFAULT_SPREADSHEET_ID): Promise<SheetTab[]> {
+  // 1. Try server proxy endpoint
   try {
     const url = `/api/sheet-tabs?spreadsheetId=${encodeURIComponent(spreadsheetId)}&_t=${Date.now()}`;
     const response = await fetch(url);
-    if (!response.ok) {
-      return INITIAL_TABS;
+    if (response.ok) {
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        const data = await response.json();
+        if (data.success && Array.isArray(data.tabs) && data.tabs.length > 0) {
+          return data.tabs;
+        }
+      }
     }
-    
-    // Check if the response is actually JSON to prevent SyntaxError on HTML (e.g. transient 502/loading pages)
-    const contentType = response.headers.get("content-type");
-    if (!contentType || !contentType.includes("application/json")) {
-      console.warn("Expected JSON but received:", contentType);
-      return INITIAL_TABS;
-    }
-
-    const data = await response.json();
-    if (data.success && Array.isArray(data.tabs) && data.tabs.length > 0) {
-      return data.tabs;
-    }
-    return INITIAL_TABS;
   } catch (error) {
-    console.error("Failed to fetch sheet tabs:", error);
-    return INITIAL_TABS;
+    console.warn("Server proxy sheet-tabs fetch failed, attempting client-side fallback:", error);
   }
+
+  // 2. Client-side fallback for Vercel / static deployments: parse htmlview directly
+  try {
+    const htmlUrl = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(spreadsheetId)}/htmlview?_t=${Date.now()}`;
+    const htmlRes = await fetch(htmlUrl);
+    if (htmlRes.ok) {
+      const html = await htmlRes.text();
+      const itemsRegex = /items\.push\(\{\s*name:\s*"([^"]+)",\s*pageUrl:\s*"([^"]+)",\s*gid:\s*"([^"]+)"/g;
+      let match;
+      const tabs: SheetTab[] = [];
+      while ((match = itemsRegex.exec(html)) !== null) {
+        let sheetName = match[1];
+        try { sheetName = JSON.parse(`"${sheetName}"`); } catch {}
+        tabs.push({
+          id: `tab-${match[3]}`,
+          name: sheetName.trim(),
+          gid: match[3].trim(),
+        });
+      }
+      if (tabs.length === 0) {
+        const buttonRegex = /id="sheet-button-([^"]+)"[^>]*><a[^>]*>([^<]+)<\/a>/g;
+        while ((match = buttonRegex.exec(html)) !== null) {
+          tabs.push({
+            id: `tab-${match[1]}`,
+            name: match[2].trim(),
+            gid: match[1].trim(),
+          });
+        }
+      }
+      if (tabs.length > 0) return tabs;
+    }
+  } catch (err) {
+    console.warn("Direct htmlview tab fetch failed:", err);
+  }
+
+  return INITIAL_TABS;
 }
 
 /**
@@ -98,24 +128,76 @@ export async function addSheetColumn(
 }
 
 /**
- * Fetches Google Sheet CSV data via the server proxy and parses headers and rows.
+ * Fetches Google Sheet CSV data with multi-level fallbacks (Server API -> GViz CSV -> Export CSV).
+ * Ensures smooth operation on Vercel static hosting and local development environments.
  */
 export async function fetchSheetData(
   spreadsheetId: string = DEFAULT_SPREADSHEET_ID,
   gid: string = '0'
 ): Promise<{ headers: string[]; rows: Record<string, any>[] }> {
-  const url = `/api/sheet-data?spreadsheetId=${encodeURIComponent(spreadsheetId)}&gid=${encodeURIComponent(gid)}&_t=${Date.now()}`;
-  
-  const response = await fetch(url);
-  if (!response.ok) {
-    const errJson = await response.json().catch(() => null);
-    throw new Error(errJson?.error || `Failed to fetch sheet data (Status: ${response.status})`);
+  let csvText: string | null = null;
+  let lastErrorMsg = '';
+
+  // 1. Primary Strategy: Try backend server proxy /api/sheet-data
+  try {
+    const url = `/api/sheet-data?spreadsheetId=${encodeURIComponent(spreadsheetId)}&gid=${encodeURIComponent(gid)}&_t=${Date.now()}`;
+    const response = await fetch(url);
+    if (response.ok) {
+      const text = await response.text();
+      // Ensure the output is actual text/CSV and not an HTML error/login page
+      if (text && !text.trim().startsWith('<!DOCTYPE html>') && !text.trim().startsWith('<html')) {
+        csvText = text;
+      }
+    } else {
+      const errJson = await response.json().catch(() => null);
+      if (errJson?.error) lastErrorMsg = errJson.error;
+    }
+  } catch (err: any) {
+    console.warn("Server proxy fetch failed, attempting client-side Google Sheet fetch:", err);
   }
 
-  const csvText = await response.text();
-  
+  // 2. Secondary Strategy: Client-side direct GViz CSV export endpoint
+  // Google Sheets GViz endpoint allows CORS on public spreadsheets ("Anyone with the link can view")
+  if (!csvText) {
+    try {
+      const gvizUrl = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(spreadsheetId)}/gviz/tq?tqx=out:csv&gid=${encodeURIComponent(gid)}&_t=${Date.now()}`;
+      const response = await fetch(gvizUrl);
+      if (response.ok) {
+        const text = await response.text();
+        if (text && !text.trim().startsWith('<!DOCTYPE html>') && !text.trim().startsWith('<html')) {
+          csvText = text;
+        }
+      }
+    } catch (err: any) {
+      console.warn("GViz CSV client fallback fetch failed:", err);
+    }
+  }
+
+  // 3. Tertiary Strategy: Client-side direct export?format=csv endpoint
+  if (!csvText) {
+    try {
+      const exportUrl = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(spreadsheetId)}/export?format=csv&gid=${encodeURIComponent(gid)}&_t=${Date.now()}`;
+      const response = await fetch(exportUrl);
+      if (response.ok) {
+        const text = await response.text();
+        if (text && !text.trim().startsWith('<!DOCTYPE html>') && !text.trim().startsWith('<html')) {
+          csvText = text;
+        }
+      }
+    } catch (err: any) {
+      console.warn("Direct CSV export fallback fetch failed:", err);
+    }
+  }
+
+  if (!csvText) {
+    throw new Error(
+      lastErrorMsg ||
+      "Could not retrieve sheet data. Please ensure the Google Sheet permission is set to 'Anyone with the link can view'."
+    );
+  }
+
   return new Promise((resolve, reject) => {
-    Papa.parse(csvText, {
+    Papa.parse(csvText!, {
       header: true,
       skipEmptyLines: 'greedy',
       transformHeader: (header) => header.trim(),
@@ -136,24 +218,48 @@ export async function fetchSheetData(
 }
 
 /**
- * Calls Google Apps Script Web App through backend proxy.
+ * Calls Google Apps Script Web App through backend proxy or direct client POST.
  */
 async function callAppsScript(payload: any, webAppUrl: string = DEFAULT_WEB_APP_URL): Promise<any> {
-  const response = await fetch('/api/appscript', {
+  // 1. Try server proxy endpoint
+  try {
+    const response = await fetch('/api/appscript', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-web-app-url': webAppUrl,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (response.ok) {
+      const text = await response.text();
+      try {
+        return JSON.parse(text);
+      } catch {
+        console.warn("Server appscript endpoint returned non-JSON, falling back to direct POST");
+      }
+    }
+  } catch (err) {
+    console.warn("Server appscript proxy failed, attempting direct client fetch:", err);
+  }
+
+  // 2. Client-side Fallback for static hosts (Vercel / GitHub Pages / Netlify)
+  const targetUrl = webAppUrl || DEFAULT_WEB_APP_URL;
+  const directResponse = await fetch(targetUrl, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
-      'x-web-app-url': webAppUrl,
+      'Content-Type': 'text/plain;charset=utf-8',
     },
     body: JSON.stringify(payload),
   });
 
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Apps Script Error (${response.status}): ${errText}`);
+  const directText = await directResponse.text();
+  try {
+    return JSON.parse(directText);
+  } catch {
+    throw new Error("Failed to connect to Google Apps Script. Please verify that your Web App URL is correct and deployed with 'Who has access: Anyone'.");
   }
-
-  return response.json();
 }
 
 /**
