@@ -1,17 +1,11 @@
 import React, { useState } from 'react';
 import { 
   Table, 
-  FolderGit2, 
-  Plus, 
   Settings, 
-  HardDrive, 
   FileSpreadsheet, 
   ExternalLink,
   ChevronLeft,
   ChevronRight,
-  Database,
-  Trash2,
-  CheckCircle2,
   RefreshCw
 } from 'lucide-react';
 import { SheetTab, SheetConfig, SheetDataState } from '../types';
@@ -97,21 +91,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 id={`tab-btn-${tab.gid}`}
                 onClick={() => onSelectTab(tab.id)}
-                className={`w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition font-medium ${
+                className={`w-full text-left flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-medium relative transition-all duration-150 focus:outline-none focus:ring-1 focus:ring-teal-400/40 cursor-pointer ${
                   isActive
-                    ? 'bg-teal-700 text-white shadow-sm shadow-teal-950/40 font-semibold'
-                    : 'text-teal-100/80 hover:bg-teal-900/80 hover:text-white'
+                    ? 'text-white font-semibold'
+                    : 'text-teal-100/80 hover:bg-teal-900/60 hover:text-white'
                 }`}
-                title={`${tab.name}`}
+                title={tab.name}
               >
-                <Table className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-teal-200' : 'text-teal-400 group-hover:text-teal-300'}`} />
+                {isActive && (
+                  <div
+                    className="absolute inset-0 bg-teal-700/90 rounded-lg shadow-sm border border-teal-500/30 transition-all duration-150"
+                  />
+                )}
+                <Table className={`w-3.5 h-3.5 flex-shrink-0 relative z-10 ${isActive ? 'text-teal-100' : 'text-teal-400 group-hover:text-teal-300'}`} />
                 {!collapsed && (
-                  <div className="truncate flex-1">
+                  <div className="truncate flex-1 relative z-10">
                     <div className="truncate leading-tight">{tab.name}</div>
                   </div>
                 )}
                 {isActive && !collapsed && (
-                  <span className="ml-2 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold bg-teal-900 text-teal-100 rounded-full border border-teal-800">
+                  <span className="ml-2 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold bg-teal-950/80 text-teal-100 rounded-full border border-teal-600/50 relative z-10">
                     {totalRows}
                   </span>
                 )}

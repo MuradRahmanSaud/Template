@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   X, 
   Save, 
@@ -8,6 +8,7 @@ import {
   CheckCircle2, 
   AlertCircle,
   Folder,
+  FolderUp,
   Sliders,
   FolderKanban,
   Table,
@@ -25,9 +26,169 @@ import {
   RotateCcw,
   ArrowUpDown,
   ListOrdered,
-  Key
+  Key,
+  Layout,
+  Info,
+  ChevronDown,
+  Check
 } from 'lucide-react';
-import { SheetTab, INPUT_TYPE_OPTIONS, DATA_TYPE_GID, ColumnConfig } from '../types';
+import { SheetTab, INPUT_TYPE_OPTIONS, FILTER_TYPE_OPTIONS, DATA_TYPE_GID, ColumnConfig } from '../types';
+
+const SearchableControlSelect: React.FC<{
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (val: string) => void;
+}> = ({ value, options, onChange }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selectedOpt = options.find(o => o.value === value) || options[0];
+
+  const filtered = useMemo(() => {
+    if (!searchTerm.trim()) return options;
+    return options.filter(o => o.label.toLowerCase().includes(searchTerm.toLowerCase()));
+  }, [options, searchTerm]);
+
+  return (
+    <div ref={containerRef} className="relative w-full z-20">
+      <div
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs text-slate-800 transition flex items-center justify-between gap-1.5 cursor-pointer hover:border-slate-400 shadow-2xs"
+      >
+        <span className="font-semibold text-slate-700 truncate">{selectedOpt?.label}</span>
+        <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-150 ${isOpen ? 'rotate-180 text-teal-600' : ''}`} />
+      </div>
+
+      {isOpen && (
+        <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-md shadow-lg p-2 space-y-1.5 max-h-60 overflow-y-auto">
+          <input
+            type="text"
+            placeholder="Search control types..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:border-teal-500"
+            autoFocus
+          />
+
+          <div className="space-y-0.5 max-h-44 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <div className="text-xs text-slate-400 p-2 text-center">No options found</div>
+            ) : (
+              filtered.map((opt) => {
+                const isSelected = value === opt.value;
+                return (
+                  <div
+                    key={opt.value}
+                    onClick={() => {
+                      onChange(opt.value);
+                      setIsOpen(false);
+                      setSearchTerm('');
+                    }}
+                    className={`flex items-center justify-between px-2.5 py-1.5 rounded cursor-pointer text-xs font-semibold transition ${
+                      isSelected ? 'bg-teal-50 text-teal-900 font-bold' : 'text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span>{opt.label}</span>
+                    {isSelected && <Check className="w-3.5 h-3.5 text-teal-600" />}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const SearchableFilterTypeSelect: React.FC<{
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (val: string) => void;
+}> = ({ value, options, onChange }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selectedOpt = options.find(o => o.value === value) || options.find(o => o.value === 'auto') || options[0];
+
+  const filtered = useMemo(() => {
+    if (!searchTerm.trim()) return options;
+    return options.filter(o => o.label.toLowerCase().includes(searchTerm.toLowerCase()));
+  }, [options, searchTerm]);
+
+  return (
+    <div ref={containerRef} className="relative w-full z-15">
+      <div
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs text-slate-850 transition flex items-center justify-between gap-1.5 cursor-pointer hover:border-slate-400 shadow-2xs"
+      >
+        <span className="font-semibold text-slate-700 truncate">{selectedOpt?.label}</span>
+        <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-150 ${isOpen ? 'rotate-180 text-teal-600' : ''}`} />
+      </div>
+
+      {isOpen && (
+        <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-md shadow-lg p-2 space-y-1.5 max-h-60 overflow-y-auto">
+          <input
+            type="text"
+            placeholder="Search filter types..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:border-teal-500"
+            autoFocus
+          />
+
+          <div className="space-y-0.5 max-h-44 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <div className="text-xs text-slate-400 p-2 text-center">No options found</div>
+            ) : (
+              filtered.map((opt) => {
+                const isSelected = value === opt.value;
+                return (
+                  <div
+                    key={opt.value}
+                    onClick={() => {
+                      onChange(opt.value);
+                      setIsOpen(false);
+                      setSearchTerm('');
+                    }}
+                    className={`flex items-center justify-between px-2.5 py-1.5 rounded cursor-pointer text-xs font-semibold transition ${
+                      isSelected ? 'bg-teal-50 text-teal-900 font-bold' : 'text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span>{opt.label}</span>
+                    {isSelected && <Check className="w-3.5 h-3.5 text-teal-600" />}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 import { normalizeColumnConfig, getOrderedHeaders, isNamedColumn } from '../services/sheetService';
 
 interface DataTypeModalProps {
@@ -62,12 +223,28 @@ export const DataTypeModal: React.FC<DataTypeModalProps> = ({
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   const [typesMap, setTypesMap] = useState<Record<string, string>>({});
+  const [filterTypesMap, setFilterTypesMap] = useState<Record<string, string>>({});
   const [selectOptionsMap, setSelectOptionsMap] = useState<Record<string, string>>({});
   const [selectModesMap, setSelectModesMap] = useState<Record<string, 'single' | 'multi' | 'tab'>>({});
   const [folderPathsMap, setFolderPathsMap] = useState<Record<string, string>>({});
   const [showInTableMap, setShowInTableMap] = useState<Record<string, boolean>>({});
   const [showInFormMap, setShowInFormMap] = useState<Record<string, boolean>>({});
+  const [showInFilterMap, setShowInFilterMap] = useState<Record<string, boolean>>({});
+  const [allowMissingFilterMap, setAllowMissingFilterMap] = useState<Record<string, boolean>>({});
   
+  // Visual Form Designer states
+  const [configTab, setConfigTab] = useState<'types' | 'designer'>('designer');
+  const [formSettings, setFormSettings] = useState<any>({
+    title: '',
+    modal_size: 'lg',
+    layout_type: 'grid',
+    columns_per_row: 12
+  });
+  const [gridSpansMap, setGridSpansMap] = useState<Record<string, number>>({});
+  const [requiredFieldsMap, setRequiredFieldsMap] = useState<Record<string, boolean>>({});
+  const [placeholdersMap, setPlaceholdersMap] = useState<Record<string, string>>({});
+  const [labelsMap, setLabelsMap] = useState<Record<string, string>>({});
+
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -83,12 +260,20 @@ export const DataTypeModal: React.FC<DataTypeModalProps> = ({
     const currentSnapshot = JSON.stringify({
       orderedHeaders,
       typesMap,
+      filterTypesMap,
       selectOptionsMap,
       selectModesMap,
       folderPathsMap,
       showInTableMap,
       showInFormMap,
+      showInFilterMap,
+      allowMissingFilterMap,
       primaryColumn,
+      gridSpansMap,
+      requiredFieldsMap,
+      placeholdersMap,
+      labelsMap,
+      formSettings,
     });
     return currentSnapshot !== initialSnapshot;
   }, [
@@ -96,12 +281,20 @@ export const DataTypeModal: React.FC<DataTypeModalProps> = ({
     initialSnapshot,
     orderedHeaders,
     typesMap,
+    filterTypesMap,
     selectOptionsMap,
     selectModesMap,
     folderPathsMap,
     showInTableMap,
     showInFormMap,
+    showInFilterMap,
+    allowMissingFilterMap,
     primaryColumn,
+    gridSpansMap,
+    requiredFieldsMap,
+    placeholdersMap,
+    labelsMap,
+    formSettings,
   ]);
 
   const handleAddColumn = async (e: React.FormEvent) => {
@@ -145,16 +338,25 @@ export const DataTypeModal: React.FC<DataTypeModalProps> = ({
       setOrderedHeaders(allSorted);
 
       const initialTypes: Record<string, string> = {};
+      const initialFilterTypes: Record<string, string> = {};
       const initialOptions: Record<string, string> = {};
       const initialSelectModes: Record<string, 'single' | 'multi' | 'tab'> = {};
       const initialFolders: Record<string, string> = {};
       const initialShowInTable: Record<string, boolean> = {};
       const initialShowInForm: Record<string, boolean> = {};
+      const initialShowInFilter: Record<string, boolean> = {};
+      const initialAllowMissingFilter: Record<string, boolean> = {};
+
+      const initialGridSpans: Record<string, number> = {};
+      const initialRequiredFields: Record<string, boolean> = {};
+      const initialPlaceholders: Record<string, string> = {};
+      const initialLabels: Record<string, string> = {};
 
       validHeaders.forEach((h) => {
         const rawConfig = currentColumnTypes[h] || currentColumnTypes[h.trim()];
         const norm = normalizeColumnConfig(rawConfig);
         const lower = h.toLowerCase().trim();
+        const isTextarea = (norm.type || 'text') === 'textarea';
         
         let defaultFolderForCol = norm.folderPath || 'Murad Rahman Saud';
         if (!norm.folderPath) {
@@ -170,11 +372,19 @@ export const DataTypeModal: React.FC<DataTypeModalProps> = ({
         }
 
         initialTypes[h] = norm.type || 'text';
+        initialFilterTypes[h] = norm.filterType || 'auto';
         initialOptions[h] = norm.options || '';
         initialSelectModes[h] = norm.selectMode || 'single';
         initialFolders[h] = defaultFolderForCol;
         initialShowInTable[h] = norm.showInTable !== false;
         initialShowInForm[h] = norm.showInForm !== false;
+        initialShowInFilter[h] = norm.showInFilter !== false;
+        initialAllowMissingFilter[h] = norm.allowMissingFilter !== false;
+
+        initialGridSpans[h] = (norm as any).gridSpan !== undefined ? (norm as any).gridSpan : (isTextarea ? 12 : 6);
+        initialRequiredFields[h] = !!(norm as any).required;
+        initialPlaceholders[h] = (norm as any).placeholder || `Enter ${h}...`;
+        initialLabels[h] = (norm as any).label || h;
       });
 
       let pCol = validHeaders.find((h) => {
@@ -185,21 +395,55 @@ export const DataTypeModal: React.FC<DataTypeModalProps> = ({
       setPrimaryColumn(pCol);
 
       setTypesMap(initialTypes);
+      setFilterTypesMap(initialFilterTypes);
       setSelectOptionsMap(initialOptions);
       setSelectModesMap(initialSelectModes);
       setFolderPathsMap(initialFolders);
       setShowInTableMap(initialShowInTable);
       setShowInFormMap(initialShowInForm);
+      setShowInFilterMap(initialShowInFilter);
+      setAllowMissingFilterMap(initialAllowMissingFilter);
+
+      setGridSpansMap(initialGridSpans);
+      setRequiredFieldsMap(initialRequiredFields);
+      setPlaceholdersMap(initialPlaceholders);
+      setLabelsMap(initialLabels);
+
+      // Load formSettings metadata
+      const rawFormSettings = currentColumnTypes['_formSettings'];
+      let loadedFormSettings = {
+        title: `${activeTab?.name || 'Application'} Form`,
+        modal_size: 'lg',
+        layout_type: 'grid',
+        columns_per_row: 12
+      };
+      if (rawFormSettings && typeof rawFormSettings === 'object') {
+        loadedFormSettings = {
+          title: (rawFormSettings as any).title || `${activeTab?.name || 'Application'} Form`,
+          modal_size: (rawFormSettings as any).modal_size || 'lg',
+          layout_type: (rawFormSettings as any).layout_type || 'grid',
+          columns_per_row: (rawFormSettings as any).columns_per_row || 12
+        };
+      }
+      setFormSettings(loadedFormSettings);
 
       const snapshot = JSON.stringify({
         orderedHeaders: allSorted,
         typesMap: initialTypes,
+        filterTypesMap: initialFilterTypes,
         selectOptionsMap: initialOptions,
         selectModesMap: initialSelectModes,
         folderPathsMap: initialFolders,
         showInTableMap: initialShowInTable,
         showInFormMap: initialShowInForm,
+        showInFilterMap: initialShowInFilter,
+        allowMissingFilterMap: initialAllowMissingFilter,
         primaryColumn: pCol,
+        gridSpansMap: initialGridSpans,
+        requiredFieldsMap: initialRequiredFields,
+        placeholdersMap: initialPlaceholders,
+        labelsMap: initialLabels,
+        formSettings: loadedFormSettings,
       });
       setInitialSnapshot(snapshot);
 
@@ -234,15 +478,42 @@ export const DataTypeModal: React.FC<DataTypeModalProps> = ({
           addedHeaders.forEach(h => next[h] = true);
           return next;
         });
-        setShowInFormMap(prev => {
+        setShowInFilterMap(prev => {
           const next = { ...prev };
           addedHeaders.forEach(h => next[h] = true);
+          return next;
+        });
+        setAllowMissingFilterMap(prev => {
+          const next = { ...prev };
+          addedHeaders.forEach(h => next[h] = true);
+          return next;
+        });
+        setGridSpansMap(prev => {
+          const next = { ...prev };
+          addedHeaders.forEach(h => next[h] = 6);
+          return next;
+        });
+        setRequiredFieldsMap(prev => {
+          const next = { ...prev };
+          addedHeaders.forEach(h => next[h] = false);
+          return next;
+        });
+        setPlaceholdersMap(prev => {
+          const next = { ...prev };
+          addedHeaders.forEach(h => next[h] = `Enter ${h}...`);
+          return next;
+        });
+        setLabelsMap(prev => {
+          const next = { ...prev };
+          addedHeaders.forEach(h => next[h] = h);
           return next;
         });
         setSelectedColumn(addedHeaders[0]);
       }
     }
   }, [isOpen, headers, currentColumnTypes, hasInitialized, orderedHeaders]);
+
+
 
   if (!isOpen) return null;
 
@@ -416,6 +687,8 @@ export const DataTypeModal: React.FC<DataTypeModalProps> = ({
         const typeVal = typesMap[h] || 'text';
         const showInTable = showInTableMap[h] !== false;
         const showInForm = showInFormMap[h] !== false;
+        const showInFilter = showInFilterMap[h] !== false;
+        const allowMissingFilter = allowMissingFilterMap[h] !== false;
         let options = '';
         let folderPath = '';
 
@@ -427,15 +700,26 @@ export const DataTypeModal: React.FC<DataTypeModalProps> = ({
 
         finalPayload[h] = {
           type: typeVal,
+          filterType: filterTypesMap[h] || 'auto',
           options,
           folderPath,
           showInTable,
           showInForm,
+          showInFilter,
+          allowMissingFilter,
           order: idx,
           isPrimary: h === primaryColumn,
           selectMode: selectModesMap[h] || 'single',
-        };
+          // Merge form builder parameters:
+          gridSpan: gridSpansMap[h] !== undefined ? gridSpansMap[h] : (typeVal === 'textarea' ? 12 : 6),
+          required: !!requiredFieldsMap[h],
+          placeholder: '',
+          label: labelsMap[h] || h,
+        } as any;
       });
+
+      // Save top-level form settings metadata inside the same payload
+      finalPayload['_formSettings'] = formSettings as any;
 
       onSaveColumnTypes(
         activeTab.gid,
@@ -462,8 +746,8 @@ export const DataTypeModal: React.FC<DataTypeModalProps> = ({
   const isActiveColFormVisible = showInFormMap[activeCol] !== false;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-5xl h-[92vh] max-h-[760px] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-7xl xl:max-w-[1400px] h-[94vh] max-h-[840px] flex flex-col overflow-hidden">
         {/* Top Header */}
         <div className="px-4 py-3 bg-teal-800 text-white flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2.5">
@@ -503,12 +787,19 @@ export const DataTypeModal: React.FC<DataTypeModalProps> = ({
           </div>
         )}
 
-
-
         {/* Main Body: Sidebar (Draggable Column Tabs) + Content Panel */}
         <div className="flex-1 flex overflow-hidden">
+          <style>{`
+            .no-scrollbar::-webkit-scrollbar {
+              display: none;
+            }
+            .no-scrollbar {
+              -ms-overflow-style: none;
+              scrollbar-width: none;
+            }
+          `}</style>
           {/* Left Sidebar: Column Tabs with Drag-and-Drop */}
-          <div className="w-68 sm:w-80 bg-slate-50 border-r border-slate-200 flex flex-col flex-shrink-0">
+          <div className="w-60 sm:w-68 bg-slate-50 border-r border-slate-200 flex flex-col flex-shrink-0">
             {/* Search Input in Sidebar */}
             <div className="p-2.5 border-b border-slate-200 bg-white">
               <div className="relative">
@@ -666,178 +957,491 @@ export const DataTypeModal: React.FC<DataTypeModalProps> = ({
               )}
             </div>
           </div>
-
-          {/* Right Panel: Selected Column Settings Form */}
-          <div className="flex-1 bg-white flex flex-col overflow-y-auto">
-            {activeCol ? (
-              <div className="p-5 sm:p-6 space-y-6 max-w-3xl">
-                {/* Section 2: Input Type Configuration */}
-                <div className="space-y-3">
-                  <h5 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                    <Sliders className="w-3.5 h-3.5 text-teal-600" />
-                    <span>Input Type Controller</span>
-                  </h5>
-                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-4">
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <label className="block text-xs font-semibold text-slate-700">
-                          Select Input Control Type:
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (primaryColumn === activeCol) {
-                              setPrimaryColumn('');
-                            } else {
-                              setPrimaryColumn(activeCol);
-                            }
-                          }}
-                          className={`px-2.5 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1.5 transition shadow-2xs ${
-                            primaryColumn === activeCol
-                              ? 'bg-amber-600 text-white shadow-xs'
-                              : 'bg-white text-slate-700 border border-slate-300 hover:bg-amber-50 hover:border-amber-300'
-                          }`}
-                          title="Toggle Primary / Unique ID Column"
-                        >
-                          <Key className="w-3.5 h-3.5" />
-                          <span>{primaryColumn === activeCol ? 'Primary / Unique ID (Active)' : 'Set as Primary / Unique ID'}</span>
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-                        {INPUT_TYPE_OPTIONS.map((opt) => (
-                          <button
-                            key={opt.value}
-                            type="button"
-                            onClick={() => handleTypeChange(activeCol, opt.value)}
-                            className={`px-3 py-2 border rounded-lg text-xs font-semibold flex items-center justify-center transition-colors shadow-2xs ${
-                              activeColType === opt.value
-                                ? 'bg-teal-600 text-white border-teal-700'
-                                : 'bg-white text-slate-700 border-slate-300 hover:bg-teal-50 hover:border-teal-300'
-                            }`}
-                          >
-                            {opt.label}
-                          </button>
-                        ))}
-                      </div>
+          {/* Visual Interactive Form Designer Panel */}
+          <div className="flex-1 bg-slate-50 flex flex-col lg:flex-row overflow-hidden">
+              {/* Designer Settings Sidebar */}
+              <div className="w-full lg:w-80 bg-white border-r border-slate-200 flex flex-col overflow-hidden shrink-0">
+                {/* Sidebar Content Scrollable Area */}
+                <div className="flex-1 overflow-y-auto px-4 pt-4 pb-6 space-y-5 no-scrollbar">
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 pb-2 mb-2 border-b border-slate-100">
+                      <Sliders className="w-4 h-4 text-teal-600" />
+                      <h3 className="font-bold text-slate-800 text-xs uppercase tracking-wider">Field Customizer</h3>
                     </div>
 
-                    {/* If select type, option input */}
-                    {isActiveColSelect && (
-                      <div className="pt-3 border-t border-slate-200 space-y-2.5">
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                          <label className="block text-xs font-semibold text-teal-900">
-                            Dropdown Options (Comma-Separated):
-                          </label>
-                          <div className="flex items-center gap-3">
-                            <label className="flex items-center gap-1.5 text-xs font-medium text-slate-700 cursor-pointer">
+                      {activeCol ? (
+                        <div className="space-y-4">
+                          {/* Active Field Name tag */}
+                          <div className="bg-teal-50 border border-teal-100 p-2.5 rounded-lg flex items-center justify-between">
+                            <span className="text-[10px] text-teal-800 font-bold uppercase tracking-wider font-mono truncate">{activeCol}</span>
+                            <span className="text-[9px] bg-teal-600 text-white font-bold px-2 py-0.5 rounded">Active Field</span>
+                          </div>
+
+                          {/* Part 1: Field Identity */}
+                          <div className="space-y-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                            <h4 className="text-[10.5px] font-bold text-slate-700 uppercase tracking-wide">1. Visual Properties</h4>
+                            
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-600 mb-1">Custom Label</label>
                               <input
-                                type="checkbox"
-                                checked={selectModesMap[activeCol] === 'multi'}
-                                onChange={(e) => {
-                                  const isChecked = e.target.checked;
-                                  setSelectModesMap(prev => ({
-                                    ...prev,
-                                    [activeCol]: isChecked ? 'multi' : 'single'
-                                  }));
-                                }}
-                                className="w-3.5 h-3.5 text-teal-600 rounded border-slate-300 focus:ring-teal-500"
+                                type="text"
+                                value={labelsMap[activeCol] || ''}
+                                onChange={(e) => setLabelsMap(prev => ({ ...prev, [activeCol]: e.target.value }))}
+                                className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs text-slate-800 focus:outline-none focus:border-teal-500 shadow-2xs"
                               />
-                              <span>Multi-Select</span>
-                            </label>
-                            <label className="flex items-center gap-1.5 text-xs font-medium text-slate-700 cursor-pointer">
+                            </div>
+
+                            <div className="flex items-center gap-4 pt-1">
+                              <label className="flex items-center gap-2 cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={!!requiredFieldsMap[activeCol]}
+                                  onChange={(e) => setRequiredFieldsMap(prev => ({ ...prev, [activeCol]: e.target.checked }))}
+                                  className="w-3.5 h-3.5 text-teal-600 border-slate-300 rounded focus:ring-teal-500"
+                                />
+                                <span className="text-xs text-slate-700 font-semibold">Required *</span>
+                              </label>
+
+                              <label className="flex items-center gap-2 cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={showInFormMap[activeCol] !== false}
+                                  onChange={(e) => {
+                                    const isChecked = e.target.checked;
+                                    setShowInFormMap(prev => ({ ...prev, [activeCol]: isChecked }));
+                                  }}
+                                  className="w-3.5 h-3.5 text-teal-600 border-slate-300 rounded focus:ring-teal-500"
+                                />
+                                <span className="text-xs text-slate-700 font-semibold">Show in Form</span>
+                              </label>
+                            </div>
+
+                            <div className="pt-1.5">
+                              <div className="flex justify-between items-center text-xs text-slate-700 font-semibold mb-1">
+                                <span>Grid Width (Span):</span>
+                                <span className="font-bold font-mono text-teal-700 bg-teal-100 px-1.5 py-0.5 rounded">
+                                  {gridSpansMap[activeCol] || 6} / {formSettings.columns_per_row}
+                                </span>
+                              </div>
                               <input
-                                type="checkbox"
-                                checked={selectModesMap[activeCol] === 'tab'}
-                                onChange={(e) => {
-                                  const isChecked = e.target.checked;
-                                  setSelectModesMap(prev => ({
-                                    ...prev,
-                                    [activeCol]: isChecked ? 'tab' : 'single'
-                                  }));
-                                }}
-                                className="w-3.5 h-3.5 text-teal-600 rounded border-slate-300 focus:ring-teal-500"
+                                type="range"
+                                min="1"
+                                max={formSettings.columns_per_row}
+                                value={gridSpansMap[activeCol] || 6}
+                                onChange={(e) => setGridSpansMap(prev => ({ ...prev, [activeCol]: parseInt(e.target.value) || 6 }))}
+                                className="w-full accent-teal-600 cursor-pointer"
                               />
-                              <span>Tab Select</span>
-                            </label>
+                              <div className="flex justify-between text-[10px] text-slate-400 font-medium mt-1">
+                                <span>Narrow</span>
+                                <span>Full Width</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Part 2: Input Type Controller */}
+                          <div className="space-y-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                            <div className="flex items-center justify-between">
+                              <h4 className="text-[10.5px] font-bold text-slate-700 uppercase tracking-wide">2. Input Control Type</h4>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (primaryColumn === activeCol) {
+                                    setPrimaryColumn('');
+                                  } else {
+                                    setPrimaryColumn(activeCol);
+                                  }
+                                }}
+                                className={`px-2 py-0.5 rounded-md text-[9.5px] font-bold flex items-center gap-1 transition shadow-2xs ${
+                                  primaryColumn === activeCol
+                                    ? 'bg-amber-600 text-white'
+                                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-amber-50'
+                                }`}
+                                title="Primary Unique ID Key Column"
+                              >
+                                <Key className="w-3 h-3" />
+                                <span>{primaryColumn === activeCol ? 'Primary' : 'Set Primary'}</span>
+                              </button>
+                            </div>
+
+                            <SearchableControlSelect
+                              value={activeColType}
+                              options={INPUT_TYPE_OPTIONS}
+                              onChange={(val) => handleTypeChange(activeCol, val)}
+                            />
+
+                            {/* Options configuration for Dropdown Select */}
+                            {isActiveColSelect && (
+                              <div className="pt-2 border-t border-slate-200 space-y-2">
+                                <div className="flex items-center justify-between gap-1">
+                                  <label className="block text-[10.5px] font-semibold text-teal-900">
+                                    Dropdown Options:
+                                  </label>
+                                  <div className="flex items-center gap-2">
+                                    <label className="flex items-center gap-1 text-[10px] font-medium text-slate-700 cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        checked={selectModesMap[activeCol] === 'multi'}
+                                        onChange={(e) => {
+                                          const isChecked = e.target.checked;
+                                          setSelectModesMap(prev => ({
+                                            ...prev,
+                                            [activeCol]: isChecked ? 'multi' : 'single'
+                                          }));
+                                        }}
+                                        className="w-3 h-3 text-teal-600 rounded border-slate-300"
+                                      />
+                                      <span>Multi</span>
+                                    </label>
+                                    <label className="flex items-center gap-1 text-[10px] font-medium text-slate-700 cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        checked={selectModesMap[activeCol] === 'tab'}
+                                        onChange={(e) => {
+                                          const isChecked = e.target.checked;
+                                          setSelectModesMap(prev => ({
+                                            ...prev,
+                                            [activeCol]: isChecked ? 'tab' : 'single'
+                                          }));
+                                        }}
+                                        className="w-3 h-3 text-teal-600 rounded border-slate-300"
+                                      />
+                                      <span>Tab</span>
+                                    </label>
+                                  </div>
+                                </div>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. Male, Female, Other"
+                                  value={selectOptionsMap[activeCol] || ''}
+                                  onChange={(e) => handleOptionsChange(activeCol, e.target.value)}
+                                  className="w-full px-2 py-1.5 bg-white border border-slate-300 rounded text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-teal-500 font-mono shadow-2xs"
+                                />
+                              </div>
+                            )}
+
+                            {/* File Target Folder config */}
+                            {isActiveColFile && (
+                              <div className="pt-2 border-t border-teal-200/50 space-y-2">
+                                <label className="block text-[10.5px] font-semibold text-teal-950 flex items-center gap-1">
+                                  <Folder className="w-3 h-3 text-teal-700" />
+                                  <span>Drive Path:</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="Google Drive subfolder path..."
+                                  value={folderPathsMap[activeCol] || 'Murad Rahman Saud'}
+                                  onChange={(e) => handleFolderPathChange(activeCol, e.target.value)}
+                                  className="w-full px-2 py-1.5 bg-white border border-teal-200 rounded text-xs text-teal-950 font-mono focus:outline-none focus:border-teal-600 shadow-2xs"
+                                />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Part 3: Left Filter Panel sidebar config */}
+                          <div className="space-y-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                            <h4 className="text-[10.5px] font-bold text-slate-700 uppercase tracking-wide">3. Sidebar Filter Panel</h4>
+                            
+                            <div className="flex items-center justify-between">
+                              <label className="text-[11px] font-semibold text-slate-600">Show in Filter:</label>
+                              <button
+                                type="button"
+                                onClick={() => setShowInFilterMap(prev => ({ ...prev, [activeCol]: !(prev[activeCol] !== false) }))}
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold transition ${
+                                  (showInFilterMap[activeCol] !== false)
+                                    ? 'bg-teal-600 text-white shadow-2xs'
+                                    : 'bg-slate-200 text-slate-500'
+                                }`}
+                              >
+                                {(showInFilterMap[activeCol] !== false) ? 'SHOWING' : 'HIDDEN'}
+                              </button>
+                            </div>
+                             {showInFilterMap[activeCol] !== false && (
+                              <div className="space-y-2.5 pt-1 border-t border-slate-200/60">
+                                <div>
+                                  <label className="block text-[11px] text-slate-500 font-medium mb-1">Filter Type:</label>
+                                  <SearchableFilterTypeSelect
+                                    value={filterTypesMap[activeCol] || 'auto'}
+                                    options={FILTER_TYPE_OPTIONS}
+                                    onChange={(val) => setFilterTypesMap(prev => ({ ...prev, [activeCol]: val }))}
+                                  />
+                                </div>
+
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[11px] text-slate-500 font-medium" title="Allow filtering empty rows">Missing Filter:</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setAllowMissingFilterMap(prev => ({ ...prev, [activeCol]: !prev[activeCol] }))}
+                                    className={`px-2 py-0.5 rounded text-[10px] font-semibold transition ${
+                                      allowMissingFilterMap[activeCol]
+                                        ? 'bg-amber-600 text-white shadow-2xs'
+                                        : 'bg-slate-200 text-slate-600'
+                                    }`}
+                                  >
+                                    {allowMissingFilterMap[activeCol] ? 'ON' : 'OFF'}
+                                  </button>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
-                        <input
-                          type="text"
-                          placeholder="e.g. Male, Female, Other or Active, Pending, Completed"
-                          value={selectOptionsMap[activeCol] || ''}
-                          onChange={(e) => handleOptionsChange(activeCol, e.target.value)}
-                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-teal-500 font-mono shadow-2xs"
-                        />
-                        <p className="text-[11px] text-slate-500">
-                          Options will be presented as a select dropdown menu in the Add/Edit form.
-                        </p>
-                      </div>
-                    )}
-
-                    {/* If File / Drive Upload type, folder path input */}
-                    {isActiveColFile && (
-                      <div className="pt-3 border-t border-teal-200/80 bg-teal-50/50 p-3.5 rounded-lg space-y-2.5">
-                        <div className="flex items-center justify-between">
-                          <label className="text-xs font-semibold text-teal-950 flex items-center gap-1.5">
-                            <FolderKanban className="w-4 h-4 text-teal-700" />
-                            <span>Google Drive Target Folder Path:</span>
-                          </label>
+                      ) : (
+                        <div className="text-center py-10 px-4 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                          <Sliders className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                          <p className="text-[11px] text-slate-400">Click any field card in the live form canvas to customize its properties.</p>
                         </div>
+                      )}
+                    </div>
+                </div>
+              </div>
 
-                        <div className="relative">
-                          <Folder className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                          <input
-                            type="text"
-                            placeholder="e.g. Murad Rahman Saud or Murad Rahman Saud/Photos"
-                            value={folderPathsMap[activeCol] || 'Murad Rahman Saud'}
-                            onChange={(e) => handleFolderPathChange(activeCol, e.target.value)}
-                            className="w-full pl-9 pr-3 py-2 bg-white border border-teal-300 rounded-lg text-xs text-teal-950 font-mono focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-500/20 shadow-2xs"
-                          />
-                        </div>
+              {/* Dynamic Interactive Layout Grid Preview Area */}
+              <div className="flex-1 p-6 overflow-y-auto flex flex-col">
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <h4 className="font-bold text-slate-800 text-xs">Live Interactive Grid Preview</h4>
+                    <p className="text-[11px] text-slate-500">Visual layout rendering of the generated action form. Adjust positions & widths dynamically.</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="text-[10px] bg-amber-50 border border-amber-200 text-amber-700 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                      <Sparkles className="w-3 h-3" />
+                      Interactive Builder
+                    </span>
+                  </div>
+                </div>
 
-                        {/* Quick preset pills */}
-                        <div className="space-y-1 pt-1">
-                          <p className="text-[10.5px] font-medium text-slate-600">Quick Path Presets:</p>
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            {[
-                              'Murad Rahman Saud',
-                              'Murad Rahman Saud/Profile Pictures',
-                              'Murad Rahman Saud/Cover Photos',
-                              'Murad Rahman Saud/Photos',
-                              'Murad Rahman Saud/Documents',
-                              'Murad Rahman Saud/Uploads'
-                            ].map((preset) => {
-                              const isSelected = (folderPathsMap[activeCol] || 'Murad Rahman Saud') === preset;
-                              return (
-                                <button
-                                  key={preset}
-                                  type="button"
-                                  onClick={() => handleFolderPathChange(activeCol, preset)}
-                                  className={`px-2 py-1 rounded font-mono transition text-[10.5px] border ${
-                                    isSelected
-                                      ? 'bg-teal-600 text-white border-teal-700 font-semibold shadow-2xs'
-                                      : 'bg-white hover:bg-teal-100 text-teal-800 border-slate-200'
+                {/* Form Layout Global Settings Row */}
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-4 flex flex-col md:flex-row gap-3 items-end shrink-0">
+                  <div className="flex-1 space-y-1 w-full">
+                    <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Form Modal Title</label>
+                    <input
+                      type="text"
+                      value={formSettings.title}
+                      onChange={(e) => setFormSettings(prev => ({ ...prev, title: e.target.value }))}
+                      placeholder="Enter action form title..."
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-teal-500 transition shadow-2xs font-medium"
+                    />
+                  </div>
+                  <div className="w-full md:w-48 space-y-1">
+                    <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Form Modal Width</label>
+                    <select
+                      value={formSettings.modal_size}
+                      onChange={(e) => setFormSettings(prev => ({ ...prev, modal_size: e.target.value }))}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-teal-500 transition shadow-2xs font-medium"
+                    >
+                      <option value="sm">Small (sm)</option>
+                      <option value="md">Medium (md)</option>
+                      <option value="lg">Large (lg) - Recommended</option>
+                      <option value="xl">Extra Large (xl)</option>
+                      <option value="2xl">2-Extra Large (2xl)</option>
+                      <option value="full">Full Screen (full)</option>
+                    </select>
+                  </div>
+                  <div className="w-full md:w-56 space-y-1">
+                    <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Grid Base Columns</label>
+                    <select
+                      value={formSettings.columns_per_row}
+                      onChange={(e) => setFormSettings(prev => ({ ...prev, columns_per_row: parseInt(e.target.value) || 12 }))}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-teal-500 transition shadow-2xs font-medium"
+                    >
+                      <option value="12">12 Columns (Extremely Precise)</option>
+                      <option value="6">6 Columns (Standard)</option>
+                      <option value="4">4 Columns (Compact)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Form Canvas Preview Container */}
+                <div className="border-0 rounded-xl bg-white shadow-xs p-6 flex-1 min-h-[400px]">
+                  {/* Mock Modal Header */}
+                  <div className="border-b border-slate-100 pb-4 mb-6 border-l-4 border-teal-600 pl-4">
+                    <h2 className="text-base font-extrabold text-teal-800 tracking-tight">
+                      {formSettings.title || 'Dynamic Request Form'}
+                    </h2>
+                    <p className="text-xs text-slate-500 mt-0.5">Please complete the details below to submit your request.</p>
+                  </div>
+
+                  {/* Mock Form Grid Layout */}
+                  <div className="grid gap-x-3 gap-y-2" style={{ gridTemplateColumns: `repeat(${formSettings.columns_per_row}, minmax(0, 1fr))` }}>
+                    {orderedHeaders
+                      .filter(h => showInFormMap[h] !== false)
+                      .map((h, idx) => {
+                        const colSpan = gridSpansMap[h] !== undefined ? gridSpansMap[h] : 6;
+                        const isColActive = h === activeCol;
+                        const labelText = labelsMap[h] || h;
+                        const isRequired = !!requiredFieldsMap[h];
+                        const currentType = typesMap[h] || 'text';
+                        const isSelect = currentType === 'select';
+                        const selectMode = selectModesMap[h] || 'single';
+                        const isDateTimeType = ['date', 'time', 'datetime-local'].includes(currentType);
+                        const shouldFloat = isColActive || isDateTimeType || currentType === 'checkbox' || (isSelect && selectMode === 'tab');
+                        const labelWithRequired = labelText + (isRequired ? ' *' : '');
+
+                        return (
+                          <div
+                            key={h}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, orderedHeaders.indexOf(h))}
+                            onDragOver={(e) => handleDragOver(e, orderedHeaders.indexOf(h))}
+                            onDragEnd={handleDragEnd}
+                            onDrop={(e) => handleDrop(e, orderedHeaders.indexOf(h))}
+                            onClick={() => setSelectedColumn(h)}
+                            style={{ gridColumn: `span ${colSpan} / span ${colSpan}` }}
+                            className={`group pt-3 pb-1 transition cursor-grab select-none ${
+                              isColActive
+                                ? 'ring-2 ring-teal-500/10 rounded-md px-1'
+                                : 'hover:ring-1 hover:ring-slate-200 rounded-md px-1'
+                            } ${dragOverIndex === orderedHeaders.indexOf(h) ? 'opacity-50 border-dashed border-2 border-teal-500' : ''}`}
+                          >
+                            {/* Render different fields based on actual configured input type */}
+                            <div className="relative">
+                              {/* Modern Floating Label for Visual Builder Preview */}
+                              <label className={`absolute left-[11px] -translate-y-1/2 transition-all duration-200 pointer-events-none select-none z-10 ${
+                                shouldFloat
+                                  ? `top-0 text-[10px] font-bold bg-white px-1.5 ${isColActive ? 'text-teal-600' : 'text-slate-500'}`
+                                  : currentType === 'textarea'
+                                    ? 'top-[18px] text-xs text-slate-400 font-medium'
+                                    : 'top-1/2 text-xs text-slate-400 font-medium'
+                              }`}>
+                                {labelWithRequired}
+                              </label>
+                              {currentType === 'textarea' ? (
+                                <textarea
+                                  disabled
+                                  placeholder=""
+                                  rows={3}
+                                  className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-xs text-slate-400 placeholder-slate-400 resize-none pointer-events-none ${
+                                    isColActive ? 'border-teal-500 ring-1 ring-teal-500/20' : 'border-slate-300'
                                   }`}
-                                >
-                                  {preset}
-                                </button>
-                              );
-                            })}
+                                />
+                              ) : isSelect ? (
+                                selectMode === 'multi' ? (
+                                  <div className={`w-full min-h-[34px] px-2.5 py-1 bg-white border rounded-md text-xs transition flex items-center justify-between gap-1.5 pointer-events-none ${
+                                    isColActive ? 'border-teal-500 ring-1 ring-teal-500/20' : 'border-slate-300'
+                                  }`}>
+                                    <div className="flex flex-wrap gap-1 items-center">
+                                    </div>
+                                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                  </div>
+                                ) : selectMode === 'tab' ? (
+                                  <div className={`flex flex-wrap gap-1.5 p-1 bg-slate-50 rounded-lg border pointer-events-none w-full ${
+                                    isColActive ? 'border-teal-500 ring-1 ring-teal-500/20' : 'border-slate-200'
+                                  }`}>
+                                    {(() => {
+                                      const opts = (selectOptionsMap[h] || '')
+                                        .split(',')
+                                        .map((s) => s.trim())
+                                        .filter(Boolean);
+                                      const selectOptions = opts.length > 0 ? opts : ['Active', 'Pending', 'Completed'];
+                                      return selectOptions.slice(0, 3).map((opt, idx) => (
+                                        <button
+                                          key={opt}
+                                          type="button"
+                                          disabled
+                                          className={`flex-1 min-w-[60px] px-2.5 py-1 rounded text-[10px] font-bold transition text-center truncate ${
+                                            idx === 0
+                                              ? 'bg-teal-700 text-white shadow-xs'
+                                              : 'bg-white text-slate-500 border border-slate-200/80'
+                                          }`}
+                                        >
+                                          {opt}
+                                        </button>
+                                      ));
+                                    })()}
+                                  </div>
+                                ) : (
+                                  <div className={`w-full min-h-[34px] px-2.5 py-1.5 bg-white border rounded-md text-xs transition flex items-center justify-between gap-1.5 pointer-events-none ${
+                                    isColActive ? 'border-teal-500 ring-1 ring-teal-500/20' : 'border-slate-300'
+                                  }`}>
+                                    <span className="text-slate-400 font-medium"></span>
+                                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                  </div>
+                                )
+                              ) : currentType === 'checkbox' ? (
+                                <label className={`flex items-center gap-2.5 p-2 bg-white border rounded-md transition pointer-events-none w-full ${
+                                  isColActive ? 'border-teal-500 ring-1 ring-teal-500/20' : 'border-slate-300'
+                                }`}>
+                                  <input
+                                     type="checkbox"
+                                     disabled
+                                     checked={true}
+                                     className="w-4 h-4 text-teal-600 rounded border-slate-300"
+                                  />
+                                  <span className="text-xs font-semibold text-slate-500">
+                                    Yes / Active (Preview)
+                                  </span>
+                                </label>
+                              ) : currentType === 'file' ? (
+                                <div className="space-y-2 pointer-events-none w-full">
+                                  <div className="flex items-stretch w-full">
+                                    <input
+                                      type="text"
+                                      disabled
+                                      placeholder=""
+                                      className={`flex-1 min-w-0 pl-2.5 pr-2.5 py-1.5 bg-white border rounded-l-md text-xs text-slate-400 font-mono border-r-0 ${
+                                        isColActive ? 'border-teal-500 ring-1 ring-teal-500/20' : 'border-slate-300'
+                                      }`}
+                                    />
+                                    <button
+                                      type="button"
+                                      disabled
+                                      className="px-3 bg-teal-600 text-white rounded-r-md flex items-center justify-center shrink-0 border border-teal-600 border-l-0"
+                                    >
+                                      <FolderUp className="w-4 h-4 text-teal-100" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <input
+                                  type={
+                                    currentType === 'date'
+                                      ? 'date'
+                                      : currentType === 'time'
+                                      ? 'time'
+                                      : currentType === 'datetime-local'
+                                      ? 'datetime-local'
+                                      : currentType === 'number'
+                                      ? 'number'
+                                      : currentType === 'email'
+                                      ? 'email'
+                                      : currentType === 'tel'
+                                      ? 'tel'
+                                      : currentType === 'url'
+                                      ? 'url'
+                                      : 'text'
+                                  }
+                                  disabled
+                                  placeholder=""
+                                  className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-xs text-slate-400 placeholder-slate-400 pointer-events-none ${
+                                    isColActive ? 'border-teal-500 ring-1 ring-teal-500/20' : 'border-slate-300'
+                                  }`}
+                                />
+                              )}
+                            </div>
+
+                            {/* Active quick adjust buttons */}
+                            {isColActive && (
+                              <div className="absolute -top-1.5 right-2 bg-teal-600 text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full shadow-xs flex items-center gap-1 z-10">
+                                <Sliders className="w-2.5 h-2.5" />
+                                Customizing
+                              </div>
+                            )}
                           </div>
-                        </div>
+                        );
+                      })}
+
+                    {headers.filter(h => showInFormMap[h] !== false).length === 0 && (
+                      <div className="col-span-full py-16 text-center text-slate-400 border border-dashed border-slate-200 rounded-xl bg-slate-50/30">
+                        <EyeOff className="w-8 h-8 mx-auto text-slate-300 mb-2" />
+                        <p className="text-xs">No visible form fields.</p>
+                        <p className="text-[11px] text-slate-400 mt-1">Check column visibility in the side sidebar to make fields visible.</p>
                       </div>
                     )}
                   </div>
                 </div>
               </div>
-            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-400">
-                <Columns className="w-10 h-10 text-slate-300 mb-2" />
-                <p className="text-xs">Select a column tab from the sidebar to customize its properties.</p>
-              </div>
-            )}
-          </div>
+            </div>
         </div>
+
 
         {/* Modal Footer */}
         <div className="px-4 py-3 bg-slate-100 border-t border-slate-200 flex items-center justify-between text-xs flex-shrink-0">

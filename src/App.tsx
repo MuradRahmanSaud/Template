@@ -12,12 +12,13 @@ import {
   updateRowInSheet, 
   deleteRowFromSheet,
   addSheetColumn,
+  fetchFormStyleFromSheet,
   DEFAULT_SPREADSHEET_ID,
   DEFAULT_WEB_APP_URL,
   DEFAULT_FOLDER_PATH,
   INITIAL_TABS
 } from './services/sheetService';
-import { SheetConfig, SheetTab, SheetDataState, ColumnTypeMap, ColumnConfig } from './types';
+import { SheetConfig, SheetTab, SheetDataState, ColumnTypeMap, ColumnConfig, FormStyleConfig } from './types';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { DataTable } from './components/DataTable';
@@ -99,7 +100,15 @@ export default function App() {
   const [isSyncingTabs, setIsSyncingTabs] = useState<boolean>(false);
 
   // Column Input Types map { [gid]: { [columnName]: inputType } }
-  const [columnTypeMap, setColumnTypeMap] = useState<ColumnTypeMap>({});
+  const [columnTypeMap, setColumnTypeMap] = useState<ColumnTypeMap>(() => {
+    const saved = localStorage.getItem('sheetsync_column_types');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {}
+    }
+    return {};
+  });
 
   // In-memory tab data cache per GID for instant tab switching
   const [tabCache, setTabCache] = useState<
@@ -128,6 +137,16 @@ export default function App() {
   });
 
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [isFormStyleLoading, setIsFormStyleLoading] = useState<boolean>(false);
+  const [formStyleMap, setFormStyleMap] = useState<Record<string, FormStyleConfig>>(() => {
+    const saved = localStorage.getItem('sheetsync_form_styles');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {}
+    }
+    return {};
+  });
   const [previewModal, setPreviewModal] = useState<{
     isOpen: boolean;
     url: string | null;
@@ -141,6 +160,8 @@ export default function App() {
   // Sequential Sync Queue state
   const [syncQueue, setSyncQueue] = useState<SyncTask[]>([]);
   const [isProcessingQueue, setIsProcessingQueue] = useState<boolean>(false);
+  const [isFilterOpen, setIsFilterOpen] = useState<boolean>(false);
+  const [activeFilterCount, setActiveFilterCount] = useState<number>(0);
 
   const pendingSyncCount = syncQueue.length + (isProcessingQueue ? 1 : 0);
 
@@ -238,7 +259,7 @@ export default function App() {
   // Find active tab object
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
 
-  // Save config to localStorage & sync to Google Sheet (GID: 0)
+  // Save config to localStorage & sync to Google Sheet (GID: 0) and update config.ts on disk
   const handleSaveConfig = async (newConfig: SheetConfig): Promise<boolean> => {
     if (newConfig.spreadsheetId !== config.spreadsheetId) {
       setTabCache({});
@@ -247,15 +268,23 @@ export default function App() {
     localStorage.setItem('sheetsync_config', JSON.stringify(newConfig));
 
     try {
+      // 1. Update src/config.ts on disk
+      await fetch('/api/update-config-file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newConfig),
+      });
+
+      // 2. Save to GID 0 in Google Sheet
       const res = await saveAppConfigToSheet(newConfig, newConfig.webAppUrl);
       if (res.success) {
-        showToast('success', 'Configuration saved to GID 0 and active in application!');
+        showToast('success', 'Configuration saved to config.ts, GID 0 and active in application!');
       } else {
-        showToast('info', 'Configuration saved locally. (' + (res.error || 'GID 0 sync pending') + ')');
+        showToast('info', 'Configuration saved to config.ts & locally. (' + (res.error || 'GID 0 sync pending') + ')');
       }
     } catch (err: any) {
-      console.warn('Could not sync config to GID 0:', err);
-      showToast('info', 'Configuration saved locally.');
+      console.warn('Could not update config file or GID 0:', err);
+      showToast('info', 'Configuration saved locally & to config.ts.');
     }
 
     // Trigger re-sync with the updated configuration
@@ -289,8 +318,9 @@ export default function App() {
   };
 
   // Dynamically fetch and sync sheet tab names based on GID from Google Sheets
-  const syncSheetTabs = useCallback(async (currentSpreadsheetId = config.spreadsheetId, notify = false) => {
+  const syncSheetTabs = useCallback(async (currentSpreadsheetId = config.spreadsheetId, notify = false): Promise<SheetTab[]> => {
     setIsSyncingTabs(true);
+    let resultTabs: SheetTab[] = [];
     try {
       const fetchedTabs = await fetchSheetTabs(currentSpreadsheetId);
       if (fetchedTabs && fetchedTabs.length > 0) {
@@ -323,6 +353,7 @@ export default function App() {
             return currentActiveId;
           });
 
+          resultTabs = updated;
           return updated;
         });
 
@@ -336,6 +367,7 @@ export default function App() {
     } finally {
       setIsSyncingTabs(false);
     }
+    return resultTabs;
   }, [config.spreadsheetId]);
 
   // Fetch and sync configuration from GID 0 if present in Google Sheet
@@ -383,6 +415,7 @@ export default function App() {
       if (fetchedMap && Object.keys(fetchedMap).length > 0) {
         setColumnTypeMap((prev) => {
           const merged = { ...prev, ...fetchedMap };
+          localStorage.setItem('sheetsync_column_types', JSON.stringify(merged));
           return merged;
         });
       }
@@ -391,12 +424,161 @@ export default function App() {
     }
   }, [config.spreadsheetId]);
 
-  // Initial sync of real sheet tab names, app config & column types from Google Sheet
+  // Fetch active form layout config (FormStyleConfig) from the setting sheet table
+  const loadFormStyle = useCallback(async (currentGid?: string, currentSpreadsheetId = config.spreadsheetId) => {
+    if (!currentGid) return;
+    setIsFormStyleLoading(true);
+    try {
+      const stylesMap = await fetchFormStyleFromSheet(currentSpreadsheetId);
+      if (stylesMap) {
+        setFormStyleMap(prev => {
+          const merged = { ...prev, ...stylesMap };
+          localStorage.setItem('sheetsync_form_styles', JSON.stringify(merged));
+          return merged;
+        });
+      }
+    } catch (e) {
+      console.warn('No custom form style layout fetched for GID ' + currentGid + ', using defaults.', e);
+    } finally {
+      setIsFormStyleLoading(false);
+    }
+  }, [config.spreadsheetId]);
+
+  // Function to fetch and sync data for ALL sidebar sheet tabs from Google Sheets
+  const syncAllSheetsData = useCallback(
+    async (currentConfig = config, targetTabs = tabs) => {
+      const visibleTabs = targetTabs.filter((t) => !t.hidden);
+      if (visibleTabs.length === 0) return;
+
+      setDataState((prev) => ({ ...prev, loading: true, error: null }));
+
+      try {
+        const results = await Promise.allSettled(
+          visibleTabs.map(async (tab) => {
+            const { headers, rows } = await fetchSheetData(currentConfig.spreadsheetId, tab.gid);
+            return { gid: tab.gid, headers, rows, syncedAt: new Date() };
+          })
+        );
+
+        const newCache: Record<string, { headers: string[]; rows: Record<string, any>[]; lastSynced: Date }> = {};
+        let activeTabSyncResult: { headers: string[]; rows: Record<string, any>[]; syncedAt: Date } | null = null;
+
+        results.forEach((res, idx) => {
+          if (res.status === 'fulfilled') {
+            const { gid, headers, rows, syncedAt } = res.value;
+            newCache[gid] = { headers, rows, lastSynced: syncedAt };
+            if (activeTab?.gid && String(gid).trim() === String(activeTab.gid).trim()) {
+              activeTabSyncResult = { headers, rows, syncedAt };
+            }
+          } else {
+            console.warn(`Failed to sync data for tab "${visibleTabs[idx].name}" (${visibleTabs[idx].gid}):`, res.reason);
+          }
+        });
+
+        setTabCache((prev) => ({ ...prev, ...newCache }));
+
+        if (activeTabSyncResult) {
+          setDataState({
+            headers: activeTabSyncResult.headers,
+            rows: activeTabSyncResult.rows,
+            loading: false,
+            error: null,
+            lastSynced: activeTabSyncResult.syncedAt,
+          });
+        } else if (activeTab?.gid && newCache[activeTab.gid]) {
+          setDataState({
+            headers: newCache[activeTab.gid].headers,
+            rows: newCache[activeTab.gid].rows,
+            loading: false,
+            error: null,
+            lastSynced: newCache[activeTab.gid].lastSynced,
+          });
+        } else {
+          setDataState((prev) => ({ ...prev, loading: false }));
+        }
+      } catch (err: any) {
+        console.error('Error syncing all sheets data:', err);
+        setDataState((prev) => ({
+          ...prev,
+          loading: false,
+          error: err.message || 'Failed to sync sheets data',
+        }));
+      }
+    },
+    [config, tabs, activeTab?.gid]
+  );
+
+  // Initial sync when application opens: syncs app config, tab names, column types, AND loads active sheet data first, then other tabs
   useEffect(() => {
-    syncAppConfig(config.spreadsheetId);
-    syncSheetTabs(config.spreadsheetId, false);
-    syncDataTypeConfigs(config.spreadsheetId);
-  }, [config.spreadsheetId, syncAppConfig, syncSheetTabs, syncDataTypeConfigs]);
+    const initializeAppData = async () => {
+      await syncAppConfig(config.spreadsheetId);
+      const syncedTabs = await syncSheetTabs(config.spreadsheetId, false);
+      await syncDataTypeConfigs(config.spreadsheetId);
+
+      const targetTabs = syncedTabs && syncedTabs.length > 0 ? syncedTabs : tabs;
+      const visibleTabs = targetTabs.filter((t) => !t.hidden);
+      const validTabs = visibleTabs.length > 0 ? visibleTabs : targetTabs;
+      
+      const firstTab = validTabs[0] || targetTabs[0];
+      const activeGid = activeTab?.gid || firstTab?.gid;
+      if (activeGid) {
+        await loadFormStyle(activeGid);
+      }
+
+      // 1. Sync ONLY the first/active tab's data immediately to show the app as "open"
+      if (activeGid) {
+        setDataState((prev) => ({ ...prev, loading: true, error: null }));
+        try {
+          const { headers, rows } = await fetchSheetData(config.spreadsheetId, activeGid);
+          const syncedAt = new Date();
+          setDataState({
+            headers,
+            rows,
+            loading: false,
+            error: null,
+            lastSynced: syncedAt,
+          });
+          setTabCache((prev) => ({
+            ...prev,
+            [activeGid]: { headers, rows, lastSynced: syncedAt }
+          }));
+
+          // 2. Fetch all OTHER tabs together in the background after the first tab is successfully loaded
+          const otherTabs = validTabs.filter((t) => String(t.gid).trim() !== String(activeGid).trim());
+          if (otherTabs.length > 0) {
+            Promise.allSettled(
+              otherTabs.map(async (tab) => {
+                const { headers, rows } = await fetchSheetData(config.spreadsheetId, tab.gid);
+                return { gid: tab.gid, headers, rows, syncedAt: new Date() };
+              })
+            ).then((results) => {
+              const newCache: Record<string, { headers: string[]; rows: Record<string, any>[]; lastSynced: Date }> = {};
+              results.forEach((res, idx) => {
+                if (res.status === 'fulfilled') {
+                  const { gid, headers, rows, syncedAt } = res.value;
+                  newCache[gid] = { headers, rows, lastSynced: syncedAt };
+                } else {
+                  console.warn(`Failed to sync background data for tab "${otherTabs[idx].name}":`, res.reason);
+                }
+              });
+              setTabCache((prev) => ({ ...prev, ...newCache }));
+            }).catch((err) => {
+              console.error('Error fetching background sheets data:', err);
+            });
+          }
+        } catch (err: any) {
+          console.error('Error fetching first sheet data during init:', err);
+          setDataState((prev) => ({
+            ...prev,
+            loading: false,
+            error: err.message || 'Failed to load initial sheet data',
+          }));
+        }
+      }
+    };
+
+    initializeAppData();
+  }, [config.spreadsheetId]);
 
   const handleAddColumn = async (columnName: string) => {
     if (!activeTab) return false;
@@ -422,10 +604,14 @@ export default function App() {
     columnTypes: Record<string, ColumnConfig>
   ): boolean => {
     // 1. Optimistic UI update immediately
-    setColumnTypeMap((prev) => ({
-      ...prev,
-      [gid]: columnTypes,
-    }));
+    setColumnTypeMap((prev) => {
+      const merged = {
+        ...prev,
+        [gid]: columnTypes,
+      };
+      localStorage.setItem('sheetsync_column_types', JSON.stringify(merged));
+      return merged;
+    });
 
     // 2. Queue background task
     const newTask: SyncTask = {
@@ -498,6 +684,9 @@ export default function App() {
   // Sync on active tab or config change
   useEffect(() => {
     if (activeTab?.gid) {
+      // Load custom form styles for the newly selected sheet GID
+      loadFormStyle(activeTab.gid);
+
       if (tabCache[activeTab.gid]) {
         const cached = tabCache[activeTab.gid];
         setDataState({
@@ -511,7 +700,7 @@ export default function App() {
         loadSheetData(config, activeTab.gid, false);
       }
     }
-  }, [activeTabId, activeTab?.gid, config.spreadsheetId]);
+  }, [activeTabId, activeTab?.gid, config.spreadsheetId, loadFormStyle]);
 
   // Handle Save Record (Add or Edit) - Updates local state immediately & queues sequential sync
   const handleSaveRecord = (
@@ -688,7 +877,11 @@ export default function App() {
           setActiveTabId(id);
           setSearchQuery('');
         }}
-        onSyncTabs={() => syncSheetTabs(config.spreadsheetId, true)}
+        onSyncTabs={async () => {
+          const syncedTabs = await syncSheetTabs(config.spreadsheetId, true);
+          const targetTabs = syncedTabs && syncedTabs.length > 0 ? syncedTabs : tabs;
+          await syncAllSheetsData(config, targetTabs);
+        }}
         isSyncingTabs={isSyncingTabs}
         config={config}
         onOpenSettings={() => setIsSettingsOpen(true)}
@@ -704,7 +897,7 @@ export default function App() {
           activeTab={activeTab}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
-          onSync={() => loadSheetData(config, activeTab?.gid, true)}
+          onSync={() => syncAllSheetsData(config, tabs)}
           isSyncing={dataState.loading}
           pendingCount={pendingSyncCount}
           onAddRecord={() =>
@@ -716,6 +909,9 @@ export default function App() {
           }
           onOpenDataTypeModal={() => setIsDataTypeModalOpen(true)}
           onOpenSettings={() => setIsSettingsOpen(true)}
+          isFilterOpen={isFilterOpen}
+          onToggleFilter={() => setIsFilterOpen((prev) => !prev)}
+          activeFilterCount={activeFilterCount}
         />
 
         {/* Error Notification Alert */}
@@ -745,11 +941,15 @@ export default function App() {
 
         {/* Table View */}
         <DataTable
+          activeTabGid={activeTab?.gid}
           headers={dataState.headers}
           rows={dataState.rows}
           loading={dataState.loading}
           searchQuery={searchQuery}
           columnConfigs={columnTypeMap[activeTab?.gid || ''] || {}}
+          isFilterOpen={isFilterOpen}
+          onToggleFilter={(open) => setIsFilterOpen((prev) => (open !== undefined ? open : !prev))}
+          onActiveFilterCountChange={setActiveFilterCount}
           onOpenDataTypeModal={() => setIsDataTypeModalOpen(true)}
           onEditRow={(row) =>
             setRecordModal({
@@ -793,6 +993,7 @@ export default function App() {
         onSave={handleSaveRecord}
         targetDriveFolder={config.folderPath}
         webAppUrl={config.webAppUrl}
+        formStyle={formStyleMap[activeTab?.gid || ''] || null}
       />
 
       {/* Column Input Types Configuration Modal (Saves to Data Type GID: 613025814) */}

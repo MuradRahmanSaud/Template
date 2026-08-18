@@ -1,6 +1,8 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
 import { createServer as createViteServer } from "vite";
+import { DEFAULT_SPREADSHEET_ID, DEFAULT_WEB_APP_URL, DEFAULT_FOLDER_PATH } from "./src/config";
 
 const app = express();
 const PORT = 3000;
@@ -9,14 +11,44 @@ const PORT = 3000;
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
-// Default config values from user
-export const DEFAULT_SPREADSHEET_ID = "1EyQb90JTZBE-phZuQL12yJe0A4hdYISH-FFkepyazcg";
-export const DEFAULT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxPWayuGdnRlzk_EFgnHUk0b_E650VHX7t39XUf7iHGbGP0Xyypphmv0kNjujfUD1WBcA/exec";
-export const DEFAULT_FOLDER_PATH = "Murad Rahman Saud";
+export { DEFAULT_SPREADSHEET_ID, DEFAULT_WEB_APP_URL, DEFAULT_FOLDER_PATH };
 
 // API: Health check
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+// API: Update src/config.ts on disk when configuration changes from application
+app.post("/api/update-config-file", async (req, res) => {
+  try {
+    const { spreadsheetId, webAppUrl, folderPath } = req.body;
+    const configFilePath = path.join(process.cwd(), "src", "config.ts");
+
+    const fileContent = `/**
+ * ============================================================================
+ * GOOGLE SHEET & APPS SCRIPT CONFIGURATION
+ * ============================================================================
+ * আপনি যদি কোড থেকে ম্যানুয়ালি আপনার Google Sheet ID এবং Web App URL পরিবর্তন করতে চান,
+ * তবে নিচের মানগুলো পরিবর্তন করলেই অ্যাপের সর্বত্র তা আপডেট হয়ে যাবে।
+ * 
+ * If you want to change your Google Sheet ID and Web App URL manually from code,
+ * update them below and it will reflect across the application.
+ * ============================================================================
+ */
+
+export const DEFAULT_SPREADSHEET_ID = "${spreadsheetId || DEFAULT_SPREADSHEET_ID}";
+
+export const DEFAULT_WEB_APP_URL = "${webAppUrl || DEFAULT_WEB_APP_URL}";
+
+export const DEFAULT_FOLDER_PATH = "${folderPath || DEFAULT_FOLDER_PATH}";
+`;
+
+    fs.writeFileSync(configFilePath, fileContent, "utf-8");
+    return res.json({ success: true, message: "config.ts updated successfully" });
+  } catch (error: any) {
+    console.error("Failed to update config.ts:", error);
+    return res.status(500).json({ success: false, error: error.message || "Failed to update config.ts" });
+  }
 });
 
 // API: Fetch all sheet tabs (names and GIDs) directly from Google Sheet
@@ -134,8 +166,11 @@ app.get("/api/sheet-data", async (req, res) => {
       });
     }
 
+    // If CSV text is empty (newly created sheet without rows), provide default headers CSV
+    const finalCsv = csvText.trim() === "" ? "Title,Description,Status\n" : csvText;
+
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.send(csvText);
+    res.send(finalCsv);
   } catch (error: any) {
     console.error("Error fetching sheet CSV:", error);
     res.status(500).json({

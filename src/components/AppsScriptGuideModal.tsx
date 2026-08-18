@@ -287,6 +287,8 @@ function doPost(e) {
       }
       try {
         var newSheet = ss.insertSheet(sheetName);
+        // Initialize with default header columns so sheet data fetch works without errors
+        newSheet.appendRow(["Title", "Description", "Status"]);
         return createJsonResponse({
           success: true,
           message: "Sheet created successfully",
@@ -323,6 +325,38 @@ function doPost(e) {
         return createJsonResponse({ success: true, message: "Column added successfully" });
       } catch (e) {
         return createJsonResponse({ success: false, error: "Failed to add column: " + e.toString() });
+      }
+    }
+
+    // 9. DELETE SHEET TAB FROM GOOGLE SPREADSHEET
+    if (action === "DELETE_SHEET") {
+      var targetGid = request.sheetGid !== undefined ? String(request.sheetGid).trim() : (request.gid !== undefined ? String(request.gid).trim() : "");
+      var targetName = request.sheetName || request.name;
+
+      var sheetToDelete = null;
+      if (targetGid) {
+        sheetToDelete = getSheetByGid(ss, targetGid);
+      }
+      if (!sheetToDelete && targetName) {
+        sheetToDelete = ss.getSheetByName(targetName);
+      }
+
+      if (!sheetToDelete) {
+        return createJsonResponse({ success: false, error: "Sheet tab not found" });
+      }
+
+      try {
+        if (ss.getSheets().length <= 1) {
+          return createJsonResponse({ success: false, error: "Cannot delete the only remaining sheet in the Google Spreadsheet." });
+        }
+        var deletedTabName = sheetToDelete.getName();
+        ss.deleteSheet(sheetToDelete);
+        return createJsonResponse({
+          success: true,
+          message: "Sheet '" + deletedTabName + "' deleted from Google Sheet successfully"
+        });
+      } catch (e) {
+        return createJsonResponse({ success: false, error: "Failed to delete sheet tab: " + e.toString() });
       }
     }
 

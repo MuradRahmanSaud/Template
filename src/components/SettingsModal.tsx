@@ -9,6 +9,7 @@ import {
   RotateCcw,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   Loader2,
   ExternalLink,
   Plus,
@@ -26,7 +27,8 @@ import {
   DEFAULT_FOLDER_PATH, 
   fetchSheetData,
   fetchSheetTabs,
-  createSheetTab
+  createSheetTab,
+  deleteSheetTab
 } from '../services/sheetService';
 import { AppsScriptGuideModal } from './AppsScriptGuideModal';
 
@@ -52,6 +54,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [folderPath, setFolderPath] = useState(config.folderPath);
   const [localTabs, setLocalTabs] = useState<SheetTab[]>(tabs);
   const [activeModalTab, setActiveModalTab] = useState<'config' | 'tabs'>('config');
+  const [hasChangedSpreadsheetId, setHasChangedSpreadsheetId] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -59,8 +62,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       setWebAppUrl(config.webAppUrl);
       setFolderPath(config.folderPath);
       setLocalTabs(tabs);
+      setHasChangedSpreadsheetId(false);
     }
   }, [isOpen, config, tabs]);
+
+  const handleSpreadsheetIdChange = (newVal: string) => {
+    setSpreadsheetId(newVal);
+    // When spreadsheet ID changes, clear the web app URL and mark that it changed
+    if (newVal.trim() !== (config.spreadsheetId || '').trim()) {
+      setWebAppUrl('');
+      setHasChangedSpreadsheetId(true);
+    } else {
+      setHasChangedSpreadsheetId(false);
+      setWebAppUrl(config.webAppUrl);
+    }
+  };
 
   const isDirty = useMemo(() => {
     const spreadsheetIdChanged = spreadsheetId.trim() !== (config.spreadsheetId || '').trim();
@@ -70,11 +86,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     return spreadsheetIdChanged || webAppUrlChanged || folderPathChanged || tabsChanged;
   }, [spreadsheetId, webAppUrl, folderPath, localTabs, config, tabs]);
 
+  // Web App URL is required! If webAppUrl is empty, cannot save.
+  const canSave = isDirty && webAppUrl.trim().length > 0;
+
   const [newTabName, setNewTabName] = useState('');
 
   const [testStatus, setTestStatus] = useState<{ loading: boolean; success?: boolean; message?: string } | null>(null);
   const [isDetectingTabs, setIsDetectingTabs] = useState(false);
   const [isCreatingTab, setIsCreatingTab] = useState(false);
+  const [deletingTabId, setDeletingTabId] = useState<string | null>(null);
+  const [confirmDeleteTab, setConfirmDeleteTab] = useState<SheetTab | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
 
@@ -168,9 +189,59 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
-  const handleDeleteTab = (id: string) => {
-    if (localTabs.length <= 1) return;
-    setLocalTabs(localTabs.filter((t) => t.id !== id));
+  const handleDeleteTab = async (tab: SheetTab) => {
+    if (localTabs.length <= 1) {
+      setTestStatus({
+        loading: false,
+        success: false,
+        message: 'Cannot delete the only remaining sheet tab.',
+      });
+      return;
+    }
+
+    setDeletingTabId(tab.id);
+    setTestStatus({
+      loading: true,
+      message: `Deleting sheet tab "${tab.name}" (GID: ${tab.gid}) from Google Sheet...`,
+    });
+
+    try {
+      const res = await deleteSheetTab(spreadsheetId.trim(), tab.gid, tab.name, webAppUrl.trim());
+      if (res.success) {
+        const updatedTabs = localTabs.filter((t) => t.id !== tab.id);
+        setLocalTabs(updatedTabs);
+        setTestStatus({
+          loading: false,
+          success: true,
+          message: `Sheet tab "${tab.name}" (GID: ${tab.gid}) deleted from Google Sheet successfully!`,
+        });
+      } else {
+        const isNotFound = res.error && (res.error.includes('not found') || res.error.includes('Not found'));
+        if (isNotFound) {
+          const updatedTabs = localTabs.filter((t) => t.id !== tab.id);
+          setLocalTabs(updatedTabs);
+          setTestStatus({
+            loading: false,
+            success: true,
+            message: `Sheet tab "${tab.name}" was not found in Google Sheet and has been removed locally.`,
+          });
+        } else {
+          setTestStatus({
+            loading: false,
+            success: false,
+            message: `Failed to delete sheet from Google Sheet: ${res.error}. (Please make sure your Web App URL is active and Apps Script is deployed)`,
+          });
+        }
+      }
+    } catch (err: any) {
+      setTestStatus({
+        loading: false,
+        success: false,
+        message: `Failed to delete tab: ${err.message || 'Unknown error'}`,
+      });
+    } finally {
+      setDeletingTabId(null);
+    }
   };
 
   const handleToggleTabVisibility = (id: string) => {
@@ -195,7 +266,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="px-4 py-3 bg-teal-700 text-white flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -316,12 +387,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <input
                   type="text"
                   value={spreadsheetId}
-                  onChange={(e) => setSpreadsheetId(e.target.value)}
+                  onChange={(e) => handleSpreadsheetIdChange(e.target.value)}
                   placeholder="e.g. 1ryDvcsvIFv85mGX8SF4o7L5EHXb7f6at4-Yf7pck3lk"
                   className="w-full px-2.5 py-1.5 bg-slate-50 focus:bg-white border border-slate-300 focus:border-teal-500 rounded-md font-mono text-xs text-slate-800"
                 />
                 <p className="text-[11px] text-slate-400">
-                  Extracted from your sheet URL between /d/ and /edit
+                  Extracted from your sheet URL between /d/ and /edit {spreadsheetId.trim() !== (config.spreadsheetId || '').trim() && <span className="text-amber-600 font-semibold">(Spreadsheet ID changed — Web App URL reset & required)</span>}
                 </p>
               </div>
 
@@ -330,26 +401,33 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="flex items-center justify-between">
                   <label className="font-semibold text-slate-700 flex items-center gap-1.5">
                     <Globe className="w-3.5 h-3.5 text-teal-600" />
-                    Google Apps Script Web App URL
+                    Google Apps Script Web App URL <span className="text-rose-500 font-bold">*</span>
                   </label>
                   <button
                     type="button"
                     onClick={() => setIsGuideOpen(true)}
-                    className="text-[11px] text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-300 px-2 py-0.5 rounded font-medium transition flex items-center gap-1"
+                    className={`text-[11px] px-2.5 py-1 rounded font-bold transition flex items-center gap-1 shadow-sm ${
+                      !webAppUrl.trim()
+                        ? 'bg-amber-500 text-white animate-bounce ring-4 ring-amber-300'
+                        : 'text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-300'
+                    }`}
                     title="View Apps Script Code and setup guide to fix Drive Access Denied"
                   >
-                    <span>🛠️ Apps Script Code & Drive Fix Guide</span>
+                    <span>🛠️ Apps Script Code & Drive Fix Guide {!webAppUrl.trim() && '⚡ (Required)'}</span>
                   </button>
                 </div>
                 <input
                   type="text"
                   value={webAppUrl}
                   onChange={(e) => setWebAppUrl(e.target.value)}
-                  placeholder="https://script.google.com/macros/s/.../exec"
-                  className="w-full px-2.5 py-1.5 bg-slate-50 focus:bg-white border border-slate-300 focus:border-teal-500 rounded-md font-mono text-xs text-slate-800"
+                  placeholder="https://script.google.com/macros/s/.../exec (Required)"
+                  className={`w-full px-2.5 py-1.5 bg-slate-50 focus:bg-white border rounded-md font-mono text-xs text-slate-800 ${
+                    !webAppUrl.trim() ? 'border-amber-400 ring-2 ring-amber-100' : 'border-slate-300 focus:border-teal-500'
+                  }`}
                 />
-                <p className="text-[11px] text-slate-400">
-                  Deployed Apps Script executable URL for ADD, UPDATE, DELETE & UPLOAD_FILE
+                <p className="text-[11px] text-slate-400 flex items-center justify-between">
+                  <span>Deployed Apps Script executable URL for ADD, UPDATE, DELETE & UPLOAD_FILE</span>
+                  {!webAppUrl.trim() && <span className="text-rose-600 font-semibold">Web App URL is required before saving!</span>}
                 </p>
               </div>
 
@@ -436,11 +514,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       {localTabs.length > 1 && (
                         <button
                           type="button"
-                          onClick={() => handleDeleteTab(tab.id)}
-                          className="p-1 text-slate-400 hover:text-rose-600 transition"
-                          title="Delete Tab"
+                          onClick={() => setConfirmDeleteTab(tab)}
+                          disabled={deletingTabId === tab.id}
+                          className="p-1 text-slate-400 hover:text-rose-600 transition disabled:opacity-50 cursor-pointer"
+                          title="Delete Tab from Google Sheet"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          {deletingTabId === tab.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-600" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
                         </button>
                       )}
                     </div>
@@ -502,12 +585,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </button>
             <button
               onClick={handleSave}
-              disabled={isSaving || !isDirty}
+              disabled={isSaving || !canSave}
               className={`px-4 py-1.5 rounded font-semibold flex items-center gap-1.5 transition shadow-xs ${
-                isSaving || !isDirty
+                isSaving || !canSave
                   ? 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-60'
                   : 'bg-teal-600 hover:bg-teal-700 text-white cursor-pointer'
               }`}
+              title={!webAppUrl.trim() ? 'Google Apps Script Web App URL is required!' : ''}
             >
               {isSaving ? (
                 <>
@@ -524,6 +608,63 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Confirmation Dialog for Deleting Sheet Tab */}
+      {confirmDeleteTab && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="px-4 py-3 bg-rose-600 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-rose-700 flex items-center justify-center border border-rose-500">
+                  <AlertTriangle className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold leading-tight">Delete Sheet Tab</h3>
+                  <p className="text-[11px] text-rose-100">Permanently delete tab from Google Sheet</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteTab(null)}
+                className="p-1 rounded text-rose-200 hover:text-white transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3 text-xs">
+              <p className="text-slate-700 leading-relaxed font-medium">
+                Are you sure you want to delete tab <strong className="text-slate-900">&quot;{confirmDeleteTab.name}&quot;</strong> (GID: <code className="bg-slate-100 px-1.5 py-0.5 rounded text-teal-700 font-mono font-bold">{confirmDeleteTab.gid}</code>)?
+              </p>
+              <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 text-[11px]">
+                ⚠️ <strong>Warning:</strong> This action will permanently delete the sheet tab from your Google Spreadsheet!
+              </div>
+            </div>
+
+            <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteTab(null)}
+                className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded font-medium transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const target = confirmDeleteTab;
+                  setConfirmDeleteTab(null);
+                  handleDeleteTab(target);
+                }}
+                className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded font-semibold flex items-center gap-1.5 transition shadow-xs cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Confirm Delete</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <AppsScriptGuideModal
         isOpen={isGuideOpen}

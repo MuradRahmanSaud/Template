@@ -8,7 +8,8 @@ import {
   ExternalLink,
   CheckCircle2,
   Clock,
-  Sparkles
+  Sparkles,
+  Filter
 } from 'lucide-react';
 import { SheetTab } from '../types';
 
@@ -22,6 +23,9 @@ interface HeaderProps {
   onAddRecord: () => void;
   onOpenDataTypeModal: () => void;
   onOpenSettings: () => void;
+  isFilterOpen?: boolean;
+  onToggleFilter?: () => void;
+  activeFilterCount?: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -34,6 +38,9 @@ export const Header: React.FC<HeaderProps> = ({
   onAddRecord,
   onOpenDataTypeModal,
   onOpenSettings,
+  isFilterOpen = false,
+  onToggleFilter,
+  activeFilterCount = 0,
 }) => {
 
   return (
@@ -52,17 +59,40 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Center Search Bar */}
-      <div className="flex-1 max-w-md min-w-[180px]">
-        <div className="relative">
-          <Search className="w-3.5 h-3.5 text-teal-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+      {/* Center Search Bar with Embedded Filter Button */}
+      <div className="flex-1 max-w-md min-w-[200px]">
+        <div className="relative flex items-center">
+          {onToggleFilter ? (
+            <button
+              type="button"
+              id="header-filter-toggle-btn"
+              onClick={onToggleFilter}
+              className={`absolute left-1 top-1/2 -translate-y-1/2 z-10 flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition cursor-pointer ${
+                isFilterOpen
+                  ? 'bg-teal-600 text-white shadow-2xs ring-1 ring-teal-400/40 font-semibold'
+                  : 'bg-teal-800/90 hover:bg-teal-700/80 text-teal-200 hover:text-white'
+              }`}
+              title={isFilterOpen ? 'Hide Column Filters panel' : 'Show Column Filters panel'}
+            >
+              <Filter className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline text-[11px]">Filter</span>
+              {activeFilterCount > 0 && (
+                <span className="px-1.5 py-0.2 bg-amber-500 text-white rounded-full text-[9.5px] font-bold">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+          ) : (
+            <Search className="w-3.5 h-3.5 text-teal-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          )}
+
           <input
             id="global-search-input"
             type="text"
             placeholder="Search across all columns..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="w-full pl-8 pr-7 py-1.5 bg-teal-900/90 hover:bg-teal-900 focus:bg-teal-900 border border-teal-800 focus:border-teal-400 rounded-md text-xs text-white placeholder-teal-500 transition focus:outline-none focus:ring-1 focus:ring-teal-400/40"
+            className={`w-full ${onToggleFilter ? 'pl-20 sm:pl-22' : 'pl-8'} pr-7 py-1.5 bg-teal-900/90 hover:bg-teal-900 focus:bg-teal-900 border border-teal-800 focus:border-teal-400 rounded-md text-xs text-white placeholder-teal-500 transition focus:outline-none focus:ring-1 focus:ring-teal-400/40`}
           />
           {searchQuery && (
             <button
@@ -112,7 +142,7 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           id="header-column-types-btn"
           onClick={onOpenDataTypeModal}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium bg-teal-900 hover:bg-teal-800 text-teal-100 border border-teal-800 hover:border-teal-700 hover:text-white transition shadow-2xs"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium bg-teal-900 hover:bg-teal-800 text-teal-100 border border-teal-800 hover:border-teal-700 hover:text-white transition shadow-2xs cursor-pointer"
           title="Configure column input types for Data Type sheet (GID: 613025814)"
         >
           <SlidersHorizontal className="w-3.5 h-3.5 text-teal-300" />

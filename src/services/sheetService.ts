@@ -1,9 +1,8 @@
 import Papa from 'papaparse';
-import { SheetOperationResponse, SheetTab, UploadResponse, ColumnTypeMap, ColumnConfig, DATA_TYPE_GID } from '../types';
+import { SheetOperationResponse, SheetTab, UploadResponse, ColumnTypeMap, ColumnConfig, DATA_TYPE_GID, FormStyleConfig } from '../types';
+import { DEFAULT_SPREADSHEET_ID, DEFAULT_WEB_APP_URL, DEFAULT_FOLDER_PATH } from '../config';
 
-export const DEFAULT_SPREADSHEET_ID = "1rgu0ecVE4ClteQnbARFhQrPoorqlBrbtgMbv335r3aE";
-export const DEFAULT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbx7pZyoo61kvJe1vl_1W6lbtUGwGi-WplElEkOcv8V9Meiu9H6xh37nORzRd37MeZAA/exec";
-export const DEFAULT_FOLDER_PATH = "Murad Rahman Saud";
+export { DEFAULT_SPREADSHEET_ID, DEFAULT_WEB_APP_URL, DEFAULT_FOLDER_PATH };
 
 export const INITIAL_TABS: SheetTab[] = [
   {
@@ -96,6 +95,35 @@ export async function createSheetTab(
     return { success: false, error: res.error || "Failed to create sheet" };
   } catch (error: any) {
     return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Deletes a sheet tab from the Google Spreadsheet by GID or Name.
+ */
+export async function deleteSheetTab(
+  spreadsheetId: string,
+  sheetGid: string,
+  sheetName?: string,
+  webAppUrl: string = DEFAULT_WEB_APP_URL
+): Promise<{ success: boolean; error?: string; message?: string }> {
+  try {
+    const res = await callAppsScript(
+      {
+        action: 'DELETE_SHEET',
+        spreadsheetId,
+        sheetGid,
+        sheetName,
+        gid: sheetGid,
+      },
+      webAppUrl
+    );
+    if (res.success) {
+      return { success: true, message: res.message || "Sheet tab deleted successfully from Google Sheet" };
+    }
+    return { success: false, error: res.error || "Failed to delete sheet tab from Google Sheet" };
+  } catch (error: any) {
+    return { success: false, error: error.message || "Failed to delete sheet tab" };
   }
 }
 
@@ -656,6 +684,8 @@ export function normalizeColumnConfig(raw: string | ColumnConfig | undefined): C
       folderPath: 'Murad Rahman Saud',
       showInTable: true,
       showInForm: true,
+      showInFilter: true,
+      allowMissingFilter: true,
       order: undefined,
     };
   }
@@ -663,12 +693,20 @@ export function normalizeColumnConfig(raw: string | ColumnConfig | undefined): C
   if (typeof raw === 'object') {
     return {
       type: raw.type || 'text',
+      filterType: raw.filterType || 'auto',
       options: raw.options || '',
       folderPath: raw.folderPath || 'Murad Rahman Saud',
       showInTable: raw.showInTable !== false,
       showInForm: raw.showInForm !== false,
+      showInFilter: raw.showInFilter !== false,
+      allowMissingFilter: raw.allowMissingFilter !== false,
       order: typeof raw.order === 'number' ? raw.order : undefined,
       selectMode: raw.selectMode || 'single',
+      isPrimary: !!raw.isPrimary,
+      gridSpan: raw.gridSpan,
+      required: raw.required,
+      placeholder: raw.placeholder,
+      label: raw.label,
     };
   }
 
@@ -680,6 +718,8 @@ export function normalizeColumnConfig(raw: string | ColumnConfig | undefined): C
       folderPath: 'Murad Rahman Saud',
       showInTable: true,
       showInForm: true,
+      showInFilter: true,
+      allowMissingFilter: true,
       order: undefined,
     };
   }
@@ -690,6 +730,8 @@ export function normalizeColumnConfig(raw: string | ColumnConfig | undefined): C
       folderPath: str.substring(5).trim() || 'Murad Rahman Saud',
       showInTable: true,
       showInForm: true,
+      showInFilter: true,
+      allowMissingFilter: true,
       order: undefined,
     };
   }
@@ -700,6 +742,8 @@ export function normalizeColumnConfig(raw: string | ColumnConfig | undefined): C
       folderPath: 'Murad Rahman Saud',
       showInTable: true,
       showInForm: true,
+      showInFilter: true,
+      allowMissingFilter: true,
       order: undefined,
     };
   }
@@ -710,6 +754,8 @@ export function normalizeColumnConfig(raw: string | ColumnConfig | undefined): C
     folderPath: 'Murad Rahman Saud',
     showInTable: true,
     showInForm: true,
+    showInFilter: true,
+    allowMissingFilter: true,
     order: undefined,
   };
 }
@@ -1243,3 +1289,124 @@ export async function fetchSheetTabsConfigFromSheet(
     return null;
   }
 }
+
+/**
+ * Saves or updates GID-specific Form Style configuration to "Settings" sheet (GID: 0).
+ */
+export async function saveFormStyleToSheet(
+  spreadsheetId: string,
+  gid: string,
+  formStyle: FormStyleConfig,
+  webAppUrl: string = DEFAULT_WEB_APP_URL
+): Promise<SheetOperationResponse> {
+  try {
+    const targetSpreadsheetId = spreadsheetId.trim() || DEFAULT_SPREADSHEET_ID;
+    const targetWebAppUrl = webAppUrl.trim() || DEFAULT_WEB_APP_URL;
+
+    // Load existing Form Style database configurations map
+    let stylesMap: Record<string, any> = {};
+    const existingStyles = await fetchFormStyleFromSheet(targetSpreadsheetId);
+    if (existingStyles) {
+      stylesMap = existingStyles;
+    }
+
+    // Merge or replace active sheet's style configuration
+    stylesMap[gid] = formStyle;
+
+    let existingRows: Record<string, any>[] = [];
+    let headers: string[] = [];
+    try {
+      const data = await fetchSheetData(targetSpreadsheetId, '0');
+      existingRows = data.rows;
+      headers = data.headers;
+    } catch {}
+
+    const titleKey = headers.find(h => /^(title|key|name|setting|field)/i.test(h.trim())) || 'Title';
+    const descKey = headers.find(h => /^(description|value|val|data|content)/i.test(h.trim())) || 'Description';
+
+    const expectedTitle = 'Form Style';
+
+    const existingRow = existingRows.find((r) => {
+      return Object.entries(r).some(([key, val]) => {
+        const cleanKey = key.trim().toLowerCase();
+        const cleanVal = String(val || '').trim();
+        return (cleanKey === titleKey.toLowerCase() || /title|key|name/i.test(cleanKey)) &&
+               /^form\s*style$/i.test(cleanVal);
+      });
+    });
+
+    const rowData = {
+      [titleKey]: expectedTitle,
+      [descKey]: JSON.stringify(stylesMap),
+    };
+
+    if (existingRow) {
+      const titleCellKey = Object.keys(existingRow).find(k => k.trim().toLowerCase() === titleKey.toLowerCase()) || titleKey;
+      const currentTitleVal = existingRow[titleCellKey] || expectedTitle;
+      await updateRowInSheet(
+        targetSpreadsheetId,
+        '0',
+        titleCellKey,
+        currentTitleVal,
+        rowData,
+        targetWebAppUrl
+      );
+    } else {
+      await addRowToSheet(
+        targetSpreadsheetId,
+        '0',
+        rowData,
+        targetWebAppUrl
+      );
+    }
+
+    return {
+      success: true,
+      message: 'Form Style configuration saved to Settings sheet (GID: 0)',
+    };
+  } catch (error: any) {
+    console.error('Failed to save Form Style config to Settings sheet (GID 0):', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to save Form Style configuration',
+    };
+  }
+}
+
+/**
+ * Fetches GID-specific Form Style configuration map from Settings sheet (GID: 0).
+ */
+export async function fetchFormStyleFromSheet(
+  spreadsheetId: string = DEFAULT_SPREADSHEET_ID
+): Promise<Record<string, any> | null> {
+  try {
+    const { rows } = await fetchSheetData(spreadsheetId, '0');
+    if (!rows || rows.length === 0) return null;
+
+    for (const row of rows) {
+      let titleVal = '';
+      let descVal = '';
+
+      for (const [key, val] of Object.entries(row)) {
+        const cleanKey = key.trim().toLowerCase();
+        const strVal = String(val ?? '').trim();
+        if (/^(title|key|name|setting|field)/i.test(cleanKey)) {
+          titleVal = strVal;
+        } else if (/^(description|value|val|data|content)/i.test(cleanKey)) {
+          descVal = strVal;
+        }
+      }
+
+      if (/^form\s*style$/i.test(titleVal) && descVal) {
+        try {
+          return JSON.parse(descVal);
+        } catch {}
+      }
+    }
+    return null;
+  } catch (err) {
+    console.warn("Could not fetch Form Style config from Settings sheet (GID 0):", err);
+    return null;
+  }
+}
+

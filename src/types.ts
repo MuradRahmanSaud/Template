@@ -49,14 +49,39 @@ export interface ColumnConfig {
   folderPath?: string;
   showInTable?: boolean;
   showInForm?: boolean;
+  showInFilter?: boolean;
+  allowMissingFilter?: boolean;
   order?: number;
   isPrimary?: boolean;
   selectMode?: 'single' | 'multi' | 'tab';
+  filterType?: string;
+  gridSpan?: number;
+  required?: boolean;
+  placeholder?: string;
+  label?: string;
 }
 
 export type ColumnTypeMap = Record<string, Record<string, string | ColumnConfig>>;
 
 export const DATA_TYPE_GID = '0';
+
+export const FILTER_TYPE_OPTIONS = [
+  { value: 'auto', label: 'Auto / Default based on Input Type' },
+  { value: 'text', label: 'Text Filter (Substring search)' },
+  { value: 'exact', label: 'Exact Match' },
+  { value: 'dropdown', label: 'Dropdown Filter (Predefined options)' },
+  { value: 'multiselect', label: 'Multi-Select Filter' },
+  { value: 'search', label: 'Search Filter' },
+  { value: 'number', label: 'Number Filter (Exact / Value)' },
+  { value: 'range', label: 'Range Filter (Min - Max numeric range)' },
+  { value: 'date', label: 'Date Filter (Specific date / range)' },
+  { value: 'date_preset', label: 'Date Preset (Today, This Week, This Month)' },
+  { value: 'boolean', label: 'Boolean Filter (Yes / No, True / False)' },
+  { value: 'status', label: 'Status Filter (Pending / Approved / Rejected)' },
+  { value: 'category', label: 'Category Filter' },
+  { value: 'department', label: 'Department Filter' },
+  { value: 'null_empty', label: 'Null / Empty Filter (Missing data check)' },
+];
 
 export const INPUT_TYPE_OPTIONS = [
   { value: 'text', label: 'Single Line Text (text)' },
@@ -72,3 +97,35 @@ export const INPUT_TYPE_OPTIONS = [
   { value: 'file', label: 'File / Drive Upload (file)' },
   { value: 'checkbox', label: 'Checkbox / Yes-No (checkbox)' },
 ];
+
+export interface FormSettings {
+  title: string;
+  modal_size: 'sm' | 'md' | 'lg' | 'xl' | 'full';
+  layout_type: 'grid' | 'stacked';
+  columns_per_row: number;
+}
+
+export interface FormStyleField {
+  id: string;
+  name: string;
+  label: string;
+  type: string;
+  visible: boolean;
+  width: string;
+  grid_span: number;
+  position: {
+    row: number;
+    order: number;
+  };
+  required: boolean;
+  placeholder: string;
+  options?: string;
+}
+
+export interface FormStyleConfig {
+  form_settings: FormSettings;
+  fields: FormStyleField[];
+}
+
+export type FormStyleConfigsMap = Record<string, FormStyleConfig>;
+
