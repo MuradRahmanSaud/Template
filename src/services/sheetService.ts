@@ -14,6 +14,28 @@ export const INITIAL_TABS: SheetTab[] = [
 ];
 
 /**
+ * Initializes a new Google Sheet by renaming the first tab to "Settings"
+ * and ensuring required columns "Title" and "Description" exist.
+ */
+export async function initializeSheet(
+  spreadsheetId: string,
+  webAppUrl: string = DEFAULT_WEB_APP_URL
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await callAppsScript(
+      {
+        action: 'INITIALIZE_SHEET',
+        spreadsheetId,
+      },
+      webAppUrl
+    );
+    return { success: res.success, error: res.error };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
  * Dynamically fetches all sheet tabs with their real names and GIDs from Google Sheets.
  * Tries server API proxy first, and falls back to direct client-side Google Sheet htmlview fetch.
  */

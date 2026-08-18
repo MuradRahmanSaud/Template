@@ -13,6 +13,7 @@ import {
   deleteRowFromSheet,
   addSheetColumn,
   fetchFormStyleFromSheet,
+  initializeSheet,
   DEFAULT_SPREADSHEET_ID,
   DEFAULT_WEB_APP_URL,
   DEFAULT_FOLDER_PATH,
@@ -261,8 +262,11 @@ export default function App() {
 
   // Save config to localStorage & sync to Google Sheet (GID: 0) and update config.ts on disk
   const handleSaveConfig = async (newConfig: SheetConfig): Promise<boolean> => {
-    if (newConfig.spreadsheetId !== config.spreadsheetId) {
+    const isNewSpreadsheet = newConfig.spreadsheetId !== config.spreadsheetId;
+    if (isNewSpreadsheet) {
       setTabCache({});
+      // Attempt to initialize the new blank sheet
+      await initializeSheet(newConfig.spreadsheetId, newConfig.webAppUrl);
     }
     setConfig(newConfig);
     localStorage.setItem('sheetsync_config', JSON.stringify(newConfig));
